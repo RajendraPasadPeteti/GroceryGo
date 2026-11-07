@@ -1,181 +1,280 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
+import AdminLayout from '../../components/layout/AdminLayout';
 import { useStore } from '../../context/StoreContext';
-import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
 const AdminCategories = () => {
-  const { categories, products, addCategory, updateCategory, deleteCategory, refreshCategories: _refreshCategories, refreshProducts } = useStore();
-  const { isAuthenticated: _isAuthenticated, isAdmin: _isAdmin, protectPage } = useAuth();
-  const { showToast, openModal, closeModal } = useUI();
+  const { categories, products, addCategory, updateCategory, deleteCategory } = useStore();
+  const { showToast } = useUI();
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [formData, setFormData] = useState({ name: '', icon: '📦', description: '', active: true });
 
-  useEffect(() => {
-    protectPage('admin');
-  }, [protectPage]);
+  const [form, setForm] = useState({
+    name: '',
+    icon: '🍎',
+    description: '',
+    active: true,
+  });
 
-  useEffect(() => {
-    if (editingCategory) {
-      setFormData({ name: editingCategory.name, icon: editingCategory.icon, description: editingCategory.description, active: editingCategory.active });
-    } else {
-      setFormData({ name: '', icon: '📦', description: '', active: true });
+  const categoryListWithCounts = useMemo(() => {
+    return (categories || []).map(cat => {
+      const linkedCount = products?.filter(p => p.category?.toLowerCase() === cat.name.toLowerCase()).length || 0;
+      return {
+        ...cat,
+        linkedCount,
+      };
+    });
+  }, [categories, products]);
+
+  const filteredCategories = useMemo(() => {
+    if (!searchTerm.trim()) return categoryListWithCounts;
+    const q = searchTerm.toLowerCase().trim();
+    return categoryListWithCounts.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.description && c.description.toLowerCase().includes(q))
+    );
+  }, [categoryListWithCounts, searchTerm]);
+
+  const handleToggleStatus = (cat) => {
+    if (updateCategory) {
+      updateCategory(cat.id, { ...cat, active: !cat.active });
     }
-  }, [editingCategory]);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!formData.name || !formData.icon) { showToast('Name and icon are required', 'error'); return; }
-    if (editingCategory) { updateCategory(editingCategory.id, formData); showToast('Category updated!', 'success'); }
-    else { addCategory(formData); showToast('Category added!', 'success'); }
-    closeModal('categoryForm'); setEditingCategory(null);
+    showToast(`Category ${cat.name} ${cat.active ? 'disabled' : 'activated'}`, 'info');
   };
 
-  const handleDelete = (category) => {
-    const linkedProducts = products.filter(p => p.category === category.name).length;
-    if (linkedProducts > 0) {
-      if (!window.confirm(`This category has ${linkedProducts} products. They will be reassigned to the first available category. Continue?`)) return;
+  const handleDelete = (id, name) => {
+    if (window.confirm(`Delete category ${name}?`)) {
+      if (deleteCategory) deleteCategory(id);
+      showToast(`Category ${name} removed`, 'info');
     }
-    if (deleteCategory(category.id)) { showToast('Category deleted', 'success'); refreshProducts(); }
+  };
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      showToast('Category name is required', 'error');
+      return;
+    }
+
+    if (editingCategory) {
+      updateCategory(editingCategory.id, {
+        ...editingCategory,
+        name: form.name,
+        icon: form.icon,
+        description: form.description,
+        active: form.active,
+      });
+      showToast('Category updated', 'success');
+    } else {
+      addCategory({
+        id: 'cat-' + Date.now(),
+        name: form.name,
+        icon: form.icon || '📁',
+        description: form.description,
+        active: true,
+      });
+      showToast('New category added', 'success');
+    }
+
+    setShowModal(false);
+    setEditingCategory(null);
+    setForm({ name: '', icon: '🍎', description: '', active: true });
   };
 
   return (
     <AdminLayout>
-      <div className="admin-categories">
-        <PageHeader
-          title="Categories"
-          subtitle="Manage product categories"
-          breadcrumb={[{ label: 'Dashboard', href: '/admin/dashboard' }, { label: 'Categories' }]}
-          actions={<button className="btn btn--primary" onClick={() => { setEditingCategory(null); openModal('categoryForm'); }}>+ Add Category</button>}
-        />
-        <div className="card">
-          <div className="table-responsive">
-            <table className="table" role="table">
-              <thead>
-                <tr>
-                  <th scope="col">Icon</th>
-                  <th scope="col">Name</th>
-                  <th scope="col">Description</th>
-                  <th scope="col">Products</th>
-                  <th scope="col">Status</th>
-                  <th scope="col"><span className="visually-hidden">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map(cat => {
-                  const count = products.filter(p => p.category === cat.name && p.active).length;
-                  return (
-                    <tr key={cat.id}>
-                      <td><span className="category-icon">{cat.icon}</span></td>
-                      <td><strong>{cat.name}</strong></td>
-                      <td>{cat.description}</td>
-                      <td>{count}</td>
-                      <td><span className={`badge badge--${cat.active ? 'success' : 'danger'}`}>{cat.active ? 'Active' : 'Inactive'}</span></td>
-                      <td>
-                        <div className="action-buttons">
-                          <button className="btn btn--ghost btn--sm btn--icon" onClick={() => { setEditingCategory(cat); openModal('categoryForm'); }} aria-label={`Edit ${cat.name}`}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                          </button>
-                          <button className="btn btn--ghost btn--sm btn--icon btn--danger" onClick={() => handleDelete(cat)} aria-label={`Delete ${cat.name}`}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Header matching Screenshot (343).png */}
+      <div className="admin-header-row">
+        <div>
+          <h1 className="admin-header-title">
+            <span>📁</span>
+            <span>Category Management</span>
+          </h1>
+          <p className="admin-header-subtitle">
+            Organize products into intuitive categories for customer browsing and quick commerce discovery.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setEditingCategory(null);
+            setForm({ name: '', icon: '🍎', description: '', active: true });
+            setShowModal(true);
+          }}
+          className="admin-btn-primary"
+          style={{ height: '42px', padding: '0 20px', fontSize: '14px' }}
+        >
+          + Add New Category
+        </button>
+      </div>
+
+      {/* Main Table Card matching Screenshot (343).png */}
+      <div className="admin-card">
+        <div className="admin-card-head">
+          <h2 className="admin-card-title">Grocery Categories ({filteredCategories.length})</h2>
+          <div className="admin-card-actions">
+            <input
+              type="search"
+              placeholder="Search categories..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="admin-search-input"
+              style={{ minWidth: '260px' }}
+            />
           </div>
         </div>
-        {editingCategory !== null && (
-          <CategoryFormModal
-            formData={formData}
-            onFormChange={setFormData}
-            onSubmit={handleSubmit}
-            onClose={() => { closeModal('categoryForm'); setEditingCategory(null); }}
-            editing
-          />
-        )}
+
+        <div className="table-responsive">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Icon</th>
+                <th>Category Name</th>
+                <th>Description</th>
+                <th>Products Linked</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCategories && filteredCategories.length > 0 ? (
+                filteredCategories.map(cat => (
+                  <tr key={cat.id || cat.name}>
+                    <td>
+                      <span style={{ fontSize: '26px' }}>{cat.icon || '📁'}</span>
+                    </td>
+                    <td style={{ fontWeight: 800, color: '#1F2937' }}>
+                      {cat.name}
+                    </td>
+                    <td style={{ color: '#4B5563', fontSize: '13.5px' }}>
+                      {cat.description || `Fresh & quality ${cat.name.toLowerCase()}`}
+                    </td>
+                    <td>
+                      <span style={{ fontWeight: 700, color: '#16A34A' }}>
+                        {cat.linkedCount} product(s)
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className="admin-status-pill"
+                        style={{
+                          background: cat.active !== false ? '#DCFCE7' : '#F1F5F9',
+                          color: cat.active !== false ? '#15803D' : '#64748B',
+                        }}
+                      >
+                        {cat.active !== false ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCategory(cat);
+                            setForm({
+                              name: cat.name,
+                              icon: cat.icon || '🍎',
+                              description: cat.description || '',
+                              active: cat.active !== false,
+                            });
+                            setShowModal(true);
+                          }}
+                          className="admin-btn-action"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(cat)}
+                          className="admin-btn-action admin-btn-action--red"
+                        >
+                          {cat.active !== false ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(cat.id, cat.name)}
+                          className="admin-btn-action admin-btn-action--red"
+                          title="Delete category"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                    No categories found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {/* Add / Edit Category Modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', padding: '28px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', marginBottom: '16px' }}>
+              {editingCategory ? 'Edit Category' : 'Add New Category'}
+            </h3>
+
+            <form onSubmit={handleSave}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Category Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.name}
+                    onChange={e => setForm({ ...form, name: e.target.value })}
+                    className="input"
+                    placeholder="e.g. Organic Produce"
+                  />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Icon</label>
+                  <input
+                    type="text"
+                    value={form.icon}
+                    onChange={e => setForm({ ...form, icon: e.target.value })}
+                    className="input"
+                    placeholder="e.g. 🥬"
+                  />
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
+                  className="input textarea"
+                  style={{ minHeight: '80px' }}
+                  placeholder="Short description for customer discovery..."
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button type="submit" className="admin-btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                  {editingCategory ? 'Save Changes' : 'Create Category'}
+                </button>
+                <button type="button" onClick={() => setShowModal(false)} className="btn btn--secondary" style={{ flex: 1, justifyContent: 'center' }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 };
-
-const CategoryFormModal = ({ formData, onFormChange, onSubmit, onClose, editing }) => (
-  <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="category-form-title">
-    <div className="modal" onClick={e => e.stopPropagation()}>
-      <div className="modal__header">
-        <h2 id="category-form-title" className="modal__title">{editing ? 'Edit' : 'Add'} Category</h2>
-        <button className="modal__close" onClick={onClose} aria-label="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-      <form onSubmit={onSubmit}>
-        <div className="modal__body">
-          <div className="grid-2">
-            <div className="input-group">
-              <label htmlFor="c-name" className="input-label">Name *</label>
-              <input id="c-name" name="name" type="text" className="input" value={formData.name} onChange={e => onFormChange({ ...formData, name: e.target.value })} required />
-            </div>
-            <div className="input-group">
-              <label htmlFor="c-icon" className="input-label">Emoji Icon *</label>
-              <input id="c-icon" name="icon" type="text" className="input" value={formData.icon} onChange={e => onFormChange({ ...formData, icon: e.target.value })} placeholder="🍎" maxLength={2} required />
-            </div>
-          </div>
-          <div className="input-group">
-            <label htmlFor="c-desc" className="input-label">Description</label>
-            <textarea id="c-desc" name="description" className="input textarea" value={formData.description} onChange={e => onFormChange({ ...formData, description: e.target.value })} rows={3} />
-          </div>
-          <div className="input-group checkbox-group">
-            <label className="checkbox-label">
-              <input type="checkbox" checked={formData.active} onChange={e => onFormChange({ ...formData, active: e.target.checked })} className="checkbox" />
-              <span className="checkbox-custom"></span> Active
-            </label>
-          </div>
-        </div>
-        <div className="modal__footer">
-          <button type="button" className="btn btn--secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn--primary">{editing ? 'Update' : 'Add'} Category</button>
-        </div>
-      </form>
-    </div>
-  </div>
-);
-
-const PageHeader = ({ title, subtitle, breadcrumb, actions }) => (
-  <header className="page-header" role="heading" aria-level="1">
-    <div className="page-header__left">
-      {breadcrumb && (
-        <nav className="breadcrumb" aria-label="Breadcrumb">
-          <ol className="breadcrumb__list">
-            {breadcrumb.map((item, i) => (
-              <li key={item.href || i} className="breadcrumb__item">
-                {i > 0 && (
-                  <svg className="breadcrumb__separator" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                )}
-                {item.href ? <a href={item.href} className="breadcrumb__link">{item.label}</a> : <span className="breadcrumb__current" aria-current="page">{item.label}</span>}
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
-      <div>
-        <h1 className="page-header__title">{title}</h1>
-        {subtitle && <p className="page-header__subtitle">{subtitle}</p>}
-      </div>
-    </div>
-    {actions && <div className="page-header__actions">{actions}</div>}
-  </header>
-);
-
-const AdminLayout = ({ children }) => (
-  <div className="admin-layout">
-    <main className="admin-layout__main">
-      <main className="admin-layout__content" role="main">
-        <div className="container">{children}</div>
-      </main>
-    </main>
-  </div>
-);
 
 export default AdminCategories;

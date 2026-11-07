@@ -1,97 +1,68 @@
 import React from 'react';
-
-const currentYear = new Date().getFullYear();
+import { Link } from 'react-router-dom';
 
 const Footer = () => {
-
-  const footerLinks = {
-    company: [
-      { label: 'About Us', href: '#' },
-      { label: 'Careers', href: '#' },
-      { label: 'Press', href: '#' },
-      { label: 'Blog', href: '#' },
-    ],
-    support: [
-      { label: 'Help Center', href: '/support' },
-      { label: 'Contact Us', href: '/support' },
-      { label: 'FAQs', href: '#' },
-      { label: 'Returns & Refunds', href: '#' },
-    ],
-    legal: [
-      { label: 'Privacy Policy', href: '#' },
-      { label: 'Terms of Service', href: '#' },
-      { label: 'Cookie Policy', href: '#' },
-    ],
-    connect: [
-      { label: 'Facebook', href: '#', icon: '📘' },
-      { label: 'Twitter', href: '#', icon: '🐦' },
-      { label: 'Instagram', href: '#', icon: '📷' },
-      { label: 'LinkedIn', href: '#', icon: '💼' },
-    ],
-  };
-
   return (
     <footer className="footer" role="contentinfo">
       <div className="container">
         <div className="footer__grid">
-          <div className="footer__brand">
-            <a href="/" className="footer__logo" aria-label="GroceryGo Home">
-              <span className="footer__logo-icon" aria-hidden="true">🛒</span>
-              <span className="footer__logo-text">GroceryGo</span>
-            </a>
-            <p className="footer__tagline">Groceries delivered fast & fresh in 15-30 minutes</p>
-            <div className="footer__social">
-              {footerLinks.connect.map(item => (
-                <a key={item.label} href={item.href} className="footer__social-link" aria-label={item.label}>
-                  {item.icon}
-                </a>
-              ))}
-            </div>
+          {/* Brand info */}
+          <div>
+            <Link to="/" className="footer__logo">
+              <span aria-hidden="true">🛒</span>
+              <span>GroceryGo</span>
+            </Link>
+            <p className="footer__tagline">
+              Your everyday online grocery shopping and express delivery partner. Farm-fresh fruits, vegetables, dairy, and household essentials.
+            </p>
           </div>
 
-          <nav className="footer__nav" aria-label="Company links">
-            <h4 className="footer__nav-title">Company</h4>
-            <ul className="footer__nav-list">
-              {footerLinks.company.map(item => (
-                <li key={item.label}><a href={item.href} className="footer__nav-link">{item.label}</a></li>
-              ))}
+          {/* Quick Links */}
+          <div>
+            <h4 className="footer__title">Quick Links</h4>
+            <ul className="footer__list">
+              <li><Link to="/">Home</Link></li>
+              <li><a href="/#categories">Categories</a></li>
+              <li><a href="/#featured">Featured Products</a></li>
+              <li><a href="/#deals">Deals & Offers</a></li>
+              <li><Link to="/products">All Groceries</Link></li>
             </ul>
-          </nav>
+          </div>
 
-          <nav className="footer__nav" aria-label="Support links">
-            <h4 className="footer__nav-title">Support</h4>
-            <ul className="footer__nav-list">
-              {footerLinks.support.map(item => (
-                <li key={item.label}><a href={item.href} className="footer__nav-link">{item.label}</a></li>
-              ))}
+          {/* Customer Service */}
+          <div>
+            <h4 className="footer__title">Customer Service</h4>
+            <ul className="footer__list">
+              <li><Link to="/support">Help & Support Desk</Link></li>
+              <li><Link to="/track-order">Track My Order</Link></li>
+              <li><Link to="/cart">View Cart</Link></li>
+              <li><Link to="/login">Login</Link></li>
+              <li><Link to="/register">Register</Link></li>
             </ul>
-          </nav>
+          </div>
 
-          <nav className="footer__nav" aria-label="Legal links">
-            <h4 className="footer__nav-title">Legal</h4>
-            <ul className="footer__nav-list">
-              {footerLinks.legal.map(item => (
-                <li key={item.label}><a href={item.href} className="footer__nav-link">{item.label}</a></li>
-              ))}
+          {/* Contact & Location */}
+          <div>
+            <h4 className="footer__title">Contact & Location</h4>
+            <ul className="footer__list" style={{ gap: '12px' }}>
+              <li style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📍</span>
+                <span>Vijayawada, Andhra Pradesh</span>
+              </li>
+              <li style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>✉️</span>
+                <a href="mailto:support@grocerygo.com">support@grocerygo.com</a>
+              </li>
+              <li style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📞</span>
+                <a href="tel:+919876543210">+91 98765 43210</a>
+              </li>
             </ul>
-          </nav>
-
-          <div className="footer__contact">
-            <h4 className="footer__nav-title">Contact Us</h4>
-            <address className="footer__address">
-              <p><strong>Customer Support Hotline:</strong></p>
-              <p><a href="tel:+919876543210" className="footer__contact-link">+91 98765 43210</a></p>
-              <p><strong>Email:</strong></p>
-              <p><a href="mailto:support@grocerygo.com" className="footer__contact-link">support@grocerygo.com</a></p>
-              <p><strong>Fulfillment Center:</strong></p>
-              <p>GroceryGo Warehouse, MG Road<br/>Vijayawada, Andhra Pradesh - 520001</p>
-            </address>
           </div>
         </div>
 
         <div className="footer__bottom">
-          <p className="footer__copyright">&copy; {currentYear} GroceryGo. All rights reserved.</p>
-          <p className="footer__tagline-small">Made with ❤️ for academic project demonstration</p>
+          <p>© 2026 GroceryGo. All Rights Reserved. Online Grocery Shopping & Delivery Management System.</p>
         </div>
       </div>
     </footer>

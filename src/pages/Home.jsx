@@ -1,141 +1,236 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 
 const Home = () => {
-  const { products } = useStore();
-  const { isAuthenticated } = useAuth();
+  const { products, addToCart } = useStore();
   const { showToast } = useUI();
-  const [searchParams] = useSearchParams();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [featuredProducts, setFeaturedProducts] = useState([]);
+  const navigate = useNavigate();
+  const [addedItems, setAddedItems] = useState({});
 
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams);
-    if (params.get('search')) {
-      setSearchQuery(params.get('search'));
-    }
-  }, [searchParams]);
+  const categoriesList = [
+    { name: 'Fruits', icon: '🍎', desc: 'Fresh farm-picked fruits' },
+    { name: 'Vegetables', icon: '🥦', desc: 'Fresh green vegetables' },
+    { name: 'Dairy', icon: '🥛', desc: 'Milk, butter, and cheese' },
+    { name: 'Bakery', icon: '🍞', desc: 'Bread, buns, and cookies' },
+    { name: 'Snacks', icon: '🍪', desc: 'Chips, snacks, and treats' },
+    { name: 'Beverages', icon: '🥤', desc: 'Juices and cold drinks' },
+    { name: 'Groceries', icon: '🥫', desc: 'Pantry staples & spices' },
+    { name: 'Household', icon: '🧼', desc: 'Cleaners & hygiene' },
+  ];
 
-  useEffect(() => {
-    const allProducts = products.filter(p => p.active && p.featured);
-    setFeaturedProducts(allProducts.slice(0, 8));
-  }, [products]);
+  const featuredList = products.slice(0, 8);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      window.location.href = `/products?search=${encodeURIComponent(searchQuery.trim())}`;
-    }
+  const handleAdd = (product, e) => {
+    e.stopPropagation();
+    addToCart(product.id, 1);
+    setAddedItems(prev => ({ ...prev, [product.id]: (prev[product.id] || 0) + 1 }));
+    showToast(`${product.name} added to cart!`, 'success');
+    window.dispatchEvent(new CustomEvent('cart-updated'));
   };
-
-  const handleCategoryClick = (category) => {
-    window.location.href = `/products?category=${encodeURIComponent(category)}`;
-  };
-
-  const featuredCategories = [
-    { name: 'Fruits & Vegetables', icon: '🥦' },
-    { name: 'Dairy & Eggs', icon: '🥛' },
-    { name: 'Bakery', icon: '🍞' },
-    { name: 'Meat & Seafood', icon: '🍗' },
-    { name: 'Beverages', icon: '🥤' },
-    { name: 'Snacks', icon: '🍿' },
-    { name: 'Pantry', icon: '🥫' },
-    { name: 'Personal Care', icon: '🧴' },
-  ];
-
-  const heroStats = [
-    { label: 'Cities Served', value: '50+', icon: '🏙️' },
-    { label: 'Happy Customers', value: '10K+', icon: '😊' },
-    { label: 'Products Available', value: '500+', icon: '🛒' },
-    { label: 'Delivery Partners', value: '200+', icon: '🛵' },
-  ];
-
-  const benefits = [
-    { icon: '🚚', title: 'Lightning Fast Delivery', desc: '15-30 minutes to your doorstep', highlight: 'No minimum order' },
-    { icon: '🌱', title: 'Farm Fresh Quality', desc: 'Sourced directly from local farms', highlight: 'Quality guaranteed' },
-    { icon: '💰', title: 'Best Prices', desc: 'Competitive pricing with daily deals', highlight: 'Save up to 30%' },
-    { icon: '🔄', title: 'Easy Returns', desc: 'Hassle-free returns within 2 hours', highlight: 'No questions asked' },
-    { icon: '📱', title: 'Real-time Tracking', desc: 'Live order tracking with rider details', highlight: 'ETA updates' },
-    { icon: '🎁', title: 'Loyalty Rewards', desc: 'Earn coins on every purchase', highlight: 'Redeem for discounts' },
-  ];
 
   return (
-    <div className="home-page">
+    <div className="home-page" style={{ background: '#F8FAF9' }}>
       {/* Hero Section */}
-      <section className="section" aria-labelledby="hero-title" style={{ paddingTop: 'var(--space-16)', paddingBottom: 'var(--space-16)', background: 'var(--color-bg)' }}>
+      <section
+        style={{
+          background: 'linear-gradient(180deg, #F0FDF4 0%, #FFFFFF 100%)',
+          padding: '48px 0 64px',
+          borderBottom: '1px solid #E5E7EB',
+        }}
+      >
         <div className="container">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-12)', alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1.2fr 0.8fr',
+              alignItems: 'center',
+              gap: '40px',
+            }}
+          >
+            {/* Left Column */}
             <div>
-              <h1 id="hero-title" className="display-1" style={{ marginBottom: 'var(--space-6)' }}>
-                Fresh Groceries Delivered in <span style={{ color: 'var(--color-primary)' }}>15-30 Minutes</span>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: '#FFFFFF',
+                  border: '1px solid #DCFCE7',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                  padding: '6px 14px',
+                  borderRadius: '9999px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: '#15803D',
+                  marginBottom: '20px',
+                }}
+              >
+                <span>⚡</span>
+                <span>Fast & Fresh Delivery in 15-30 Mins</span>
+              </div>
+
+              <h1
+                style={{
+                  fontSize: '44px',
+                  fontWeight: 900,
+                  color: '#1F2937',
+                  lineHeight: 1.15,
+                  letterSpacing: '-0.03em',
+                  marginBottom: '16px',
+                }}
+              >
+                Groceries Delivered <br />
+                <span style={{ color: '#16A34A' }}>Fast & Fresh</span>
               </h1>
-              <p className="text-lg" style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-8)', maxWidth: '500px' }}>
-                Quality products from local stores, delivered to your doorstep. No minimum order, free delivery above ₹300.
+
+              <p
+                style={{
+                  fontSize: '16px',
+                  color: '#4B5563',
+                  lineHeight: 1.6,
+                  maxWidth: '520px',
+                  marginBottom: '28px',
+                }}
+              >
+                Your everyday groceries, farm-fresh fruits, vegetables, dairy and snacks delivered directly to your doorstep.
               </p>
 
-              <form onSubmit={handleSearch} className="search-box" style={{ maxWidth: '500px' }} role="search">
-                <label htmlFor="hero-search" className="visually-hidden">Search products</label>
-                <input
-                  id="hero-search"
-                  type="search"
-                  className="search-input"
-                  placeholder="Search for fruits, vegetables, dairy & more..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  autoComplete="off"
-                  style={{ paddingLeft: 'var(--space-12)', height: '56px', fontSize: 'var(--text-lg)' }}
-                />
-                <svg className="search-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <button type="submit" className="btn btn--primary btn--lg" style={{ position: 'absolute', right: 'var(--space-3)', top: '50%', transform: 'translateY(-50%)' }}>
-                  Search
-                </button>
-              </form>
+              <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '40px' }}>
+                <Link
+                  to="/products"
+                  className="btn btn--primary"
+                  style={{ height: '48px', padding: '0 26px', fontSize: '15px' }}
+                >
+                  Shop Now →
+                </Link>
+                <a
+                  href="#categories"
+                  className="btn btn--secondary"
+                  style={{ height: '48px', padding: '0 24px', fontSize: '15px', color: '#16A34A', borderColor: '#16A34A' }}
+                >
+                  Browse Categories
+                </a>
+              </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-8)', marginTop: 'var(--space-10)' }} role="list" aria-label="Platform statistics">
-                {heroStats.map((stat, i) => (
-                  <div key={i} className="card" style={{ padding: 'var(--space-4) var(--space-6)', flex: '1', minWidth: '120px', textAlign: 'center' }} role="listitem">
-                    <div style={{ fontSize: 'var(--text-3xl)', marginBottom: 'var(--space-2)' }}>{stat.icon}</div>
-                    <div className="display-2" style={{ color: 'var(--color-primary)', fontWeight: '700' }}>{stat.value}</div>
-                    <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{stat.label}</div>
-                  </div>
-                ))}
+              {/* 3 Benefit Badges */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '16px',
+                  paddingTop: '20px',
+                  borderTop: '1px solid #E5E7EB',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#1F2937' }}>⚡ 15-30 Mins</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>Express doorstep delivery</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#1F2937' }}>🥦 100% Fresh</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>Handpicked quality items</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#1F2937' }}>💰 Best Deals</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>Daily discounts & coupons</div>
+                </div>
               </div>
             </div>
 
-            <div aria-hidden="true" style={{ display: 'flex', justifyContent: 'center' }}>
-              <div className="card" style={{ padding: 'var(--space-8)', maxWidth: '400px', width: '100%' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
-                  {[
-                    { icon: '🍎', name: 'Fresh Apples', price: '₹120/kg', badge: '20% OFF' },
-                    { icon: '🥛', name: 'Organic Milk', price: '₹55/L', badge: '15% OFF' },
-                    { icon: '🍞', name: 'Artisan Bread', price: '₹45', badge: '10% OFF' },
-                    { icon: '🥦', name: 'Farm Veggies', price: '₹80/kg', badge: '25% OFF' },
-                  ].map((item, i) => (
-                    <div key={i} className="card" style={{ padding: 'var(--space-4)', textAlign: 'center', background: 'var(--color-bg)' }}>
-                      <div style={{ fontSize: 'var(--text-3xl)', marginBottom: 'var(--space-2)' }}>{item.icon}</div>
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-lg font-bold" style={{ color: 'var(--color-primary)' }}>{item.price}</div>
-                      <span className="badge badge--discount" style={{ marginTop: 'var(--space-2)', display: 'inline-block' }}>{item.badge}</span>
-                    </div>
-                  ))}
+            {/* Right Column Illustration */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div
+                style={{
+                  position: 'relative',
+                  width: '380px',
+                  height: '380px',
+                  background: 'radial-gradient(circle, #FFFFFF 60%, #F0FDF4 100%)',
+                  borderRadius: '50%',
+                  border: '8px solid #FFFFFF',
+                  boxShadow: '0 20px 40px -15px rgba(22, 163, 74, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div style={{ fontSize: '110px', filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.1))' }}>
+                  🛒
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  <svg width="120" height="80" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <rect x="10" y="35" width="100" height="25" rx="5" fill="var(--color-primary)" opacity="0.9"/>
-                    <rect x="25" y="20" width="70" height="15" rx="3" fill="var(--color-primary)" opacity="0.9"/>
-                    <circle cx="30" cy="62" r="10" fill="#1f1f1f"/>
-                    <circle cx="90" cy="62" r="10" fill="#1f1f1f"/>
-                    <circle cx="30" cy="62" r="4" fill="var(--color-primary)"/>
-                    <circle cx="90" cy="62" r="4" fill="var(--color-primary)"/>
-                    <rect x="50" y="50" width="20" height="15" rx="2" fill="#22c55e"/>
-                    <text x="55" y="62" fill="white" fontSize="8" fontWeight="bold">GO</text>
-                  </svg>
+
+                {/* Floating Emojis */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '20px',
+                    left: '50px',
+                    background: '#FFFFFF',
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '28px',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  🍎
+                </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '30px',
+                    right: '40px',
+                    background: '#FFFFFF',
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '28px',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  🥦
+                </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '40px',
+                    left: '40px',
+                    background: '#FFFFFF',
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '28px',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  🥛
+                </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '50px',
+                    right: '50px',
+                    background: '#FFFFFF',
+                    width: '54px',
+                    height: '54px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '28px',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  🍞
                 </div>
               </div>
             </div>
@@ -144,163 +239,139 @@ const Home = () => {
       </section>
 
       {/* Categories Section */}
-      <section className="section" aria-labelledby="categories-title">
+      <section id="categories" style={{ padding: '48px 0' }}>
         <div className="container">
-          <header className="section-header">
-            <div>
-              <h2 id="categories-title" className="section-title">Shop by Category</h2>
-              <p className="section-subtitle">Find everything you need, organized for easy browsing</p>
-            </div>
-          </header>
+          <div style={{ marginBottom: '24px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: '#16A34A', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              SHOP BY CATEGORY
+            </span>
+            <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#1F2937', marginTop: '4px' }}>
+              Explore Grocery Categories
+            </h2>
+          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--space-4)' }} role="list">
-            {featuredCategories.map((cat, i) => (
-              <button
-                key={i}
-                className="card card-hover"
-                onClick={() => handleCategoryClick(cat.name)}
-                role="listitem"
-                aria-label={`Shop ${cat.name}`}
-                style={{ padding: 'var(--space-6)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)' }}
+          <div className="category-grid">
+            {categoriesList.map(cat => (
+              <div
+                key={cat.name}
+                className="category-card"
+                onClick={() => navigate(`/products?category=${encodeURIComponent(cat.name)}`)}
+                role="button"
+                tabIndex={0}
               >
-                <div className="avatar avatar--lg" style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 'var(--text-2xl)' }}>{cat.icon}</div>
-                <h3 className="text-base font-medium">{cat.name}</h3>
-              </button>
+                <div className="category-card__icon">{cat.icon}</div>
+                <div className="category-card__name">{cat.name}</div>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
       {/* Featured Products Section */}
-      <section className="section" aria-labelledby="featured-title">
+      <section id="featured" style={{ padding: '24px 0 48px' }}>
         <div className="container">
-          <header className="section-header">
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '24px' }}>
             <div>
-              <h2 id="featured-title" className="section-title">Featured Products</h2>
-              <p className="section-subtitle">Handpicked fresh deals for you</p>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#16A34A', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                FRESH PICKS
+              </span>
+              <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#1F2937', marginTop: '4px' }}>
+                Featured Fresh Groceries
+              </h2>
             </div>
-            <Link to="/products" className="btn btn--ghost">View All Products</Link>
-          </header>
+            <Link to="/products" style={{ color: '#16A34A', fontWeight: 700, fontSize: '14px' }}>
+              Explore All →
+            </Link>
+          </div>
 
-          {featuredProducts.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 'var(--space-6)' }} role="list">
-              {featuredProducts.map((product, index) => (
-                <ProductCard key={product.id} product={product} index={index} />
-              ))}
-            </div>
-          ) : (
-            <div className="card" style={{ gridColumn: '1 / -1', padding: 'var(--space-12)', textAlign: 'center' }}>
-              <div style={{ fontSize: 'var(--text-4xl)', marginBottom: 'var(--space-4)' }}>🛒</div>
-              <h3 className="text-xl font-semibold" style={{ marginBottom: 'var(--space-2)' }}>No featured products yet</h3>
-              <p style={{ color: 'var(--color-text-secondary)' }}>Check back later for special deals</p>
-            </div>
-          )}
-        </div>
-      </section>
+          <div className="product-grid">
+            {featuredList.map(p => (
+              <div
+                key={p.id}
+                className="catalog-product-card"
+                onClick={() => navigate(`/products/${p.id}`)}
+                style={{ cursor: 'pointer' }}
+              >
+                <span
+                  className="badge badge--danger"
+                  style={{ position: 'absolute', top: '14px', left: '14px', fontSize: '11px', fontWeight: 700 }}
+                >
+                  -20%
+                </span>
 
-      {/* Benefits Section */}
-      <section className="section" aria-labelledby="benefits-title" style={{ background: 'var(--color-bg)' }}>
-        <div className="container">
-          <h2 id="benefits-title" className="section-title text-center" style={{ marginBottom: 'var(--space-12)' }}>Why Choose GroceryGo?</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-6)' }} role="list">
-            {benefits.map((benefit, i) => (
-              <article key={i} className="card card-hover" role="listitem" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
-                <div style={{ fontSize: 'var(--text-4xl)', marginBottom: 'var(--space-4)' }}>{benefit.icon}</div>
-                <h3 className="text-lg font-semibold" style={{ marginBottom: 'var(--space-2)' }}>{benefit.title}</h3>
-                <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-3)' }}>{benefit.desc}</p>
-                <span className="badge badge--primary">{benefit.highlight}</span>
-              </article>
+                <div className="catalog-product-card__image-container">
+                  <span>{p.icon || '🍏'}</span>
+                </div>
+
+                <h3 className="catalog-product-card__title">{p.name}</h3>
+                <div className="catalog-product-card__subtitle">
+                  {p.category} • {p.unit || '1 kg'}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12.5px', color: '#D97706', marginBottom: '8px' }}>
+                  <span>⭐</span>
+                  <span style={{ fontWeight: 700, color: '#1F2937' }}>{p.rating || 4.7}</span>
+                  <span style={{ color: '#9CA3AF' }}>(40+ reviews)</span>
+                </div>
+
+                <div className="catalog-product-card__footer">
+                  <div>
+                    <span className="catalog-product-card__price">₹{p.price}</span>
+                    <span className="catalog-product-card__original-price">
+                      ₹{p.originalPrice || Math.round(p.price * 1.25)}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleAdd(p, e)}
+                    className="catalog-product-card__add-btn"
+                  >
+                    {addedItems[p.id] ? `ADD (${addedItems[p.id]})` : 'ADD'}
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="section" aria-labelledby="cta-title">
+      {/* CTA Banner */}
+      <section id="deals" style={{ padding: '24px 0 64px' }}>
         <div className="container">
-          <div className="card" style={{ padding: 'var(--space-12)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-12)', alignItems: 'center', background: 'linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%)', color: 'white' }}>
+          <div
+            style={{
+              background: '#F0FDF4',
+              border: '1px solid #DCFCE7',
+              borderRadius: '20px',
+              padding: '40px 48px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '24px',
+              flexWrap: 'wrap',
+            }}
+          >
             <div>
-              <h2 id="cta-title" className="display-1" style={{ color: 'white', marginBottom: 'var(--space-4)' }}>Ready to Start Shopping?</h2>
-              <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: 'var(--text-lg)', marginBottom: 'var(--space-8)' }}>Join thousands of happy customers getting fresh groceries delivered fast</p>
-              <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-                <Link to="/products" className="btn btn--lg" style={{ background: 'white', color: 'var(--color-primary)', borderColor: 'white' }}>Shop Now</Link>
-                {!isAuthenticated() && (
-                  <Link to="/register" className="btn btn--outline btn--lg" style={{ borderColor: 'white', color: 'white' }}>Create Free Account</Link>
-                )}
-              </div>
+              <h3 style={{ fontSize: '26px', fontWeight: 800, color: '#1F2937', marginBottom: '8px' }}>
+                Everything you need, just a few clicks away.
+              </h3>
+              <p style={{ fontSize: '15px', color: '#4B5563' }}>
+                Create your GroceryGo account and start shopping today.
+              </p>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', justifyContent: 'center' }}>
-              <span className="badge badge--featured">⭐ 4.8/5 Rating</span>
-              <span className="badge badge--success">🚚 15-30 min</span>
-              <span className="badge badge--info">🔒 Secure Payment</span>
-            </div>
+
+            <Link
+              to="/products"
+              className="btn btn--primary"
+              style={{ height: '46px', padding: '0 24px', fontSize: '15px', fontWeight: 700 }}
+            >
+              Get Started →
+            </Link>
           </div>
         </div>
       </section>
     </div>
-  );
-};
-
-const ProductCard = ({ product, index }) => {
-  const { addToCart } = useStore();
-  const { showToast } = useUI();
-  const [adding, setAdding] = useState(false);
-
-  const handleAddToCart = async (e) => {
-    e.stopPropagation();
-    setAdding(true);
-    try {
-      addToCart(product.id, 1);
-      showToast(`${product.name} added to cart`, 'success');
-    } catch {
-      showToast('Failed to add to cart', 'error');
-    }
-    setAdding(false);
-  };
-
-  const discount = product.mrp && product.price < product.mrp
-    ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
-    : 0;
-
-  return (
-    <article className="card card-hover" role="listitem" style={{ display: 'flex', flexDirection: 'column', animationDelay: `${index * 50}ms` }}>
-      <div className="card__image" style={{ position: 'relative', aspectRatio: '1', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <span style={{ fontSize: '4rem' }}>{product.icon}</span>
-        {discount > 0 && (
-          <span className="badge badge--discount" style={{ position: 'absolute', top: 'var(--space-3)', right: 'var(--space-3)' }}>{discount}% OFF</span>
-        )}
-        {product.featured && (
-          <span className="badge badge--featured" style={{ position: 'absolute', top: 'var(--space-3)', left: 'var(--space-3)' }}>Featured</span>
-        )}
-      </div>
-      <div className="card__body" style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <p className="text-xs" style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-1)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{product.category}</p>
-        <h3 className="text-base font-semibold" style={{ marginBottom: 'var(--space-1)' }}>{product.name}</h3>
-        <p className="text-sm" style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-3)' }}>{product.unit}</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
-          <span className="text-xl font-bold" style={{ color: 'var(--color-primary)' }}>₹{product.price}</span>
-          {product.mrp && product.price < product.mrp && (
-            <span className="text-sm" style={{ color: 'var(--color-text-secondary)', textDecoration: 'line-through' }}>₹{product.mrp}</span>
-          )}
-        </div>
-        <div className="card__footer" style={{ paddingTop: 'var(--space-3)', borderTop: '1px solid var(--color-border)', marginTop: 'auto' }}>
-          {product.stock > 0 ? (
-            <button
-              className="btn btn--primary btn--full"
-              onClick={handleAddToCart}
-              disabled={adding}
-              aria-label={adding ? `Adding ${product.name} to cart` : `Add ${product.name} to cart`}
-            >
-              {adding ? 'Adding...' : 'Add to Cart'}
-            </button>
-          ) : (
-            <button className="btn btn--secondary btn--full" disabled aria-label={`${product.name} is out of stock`}>
-              Out of Stock
-            </button>
-          )}
-        </div>
-      </div>
-    </article>
   );
 };
 

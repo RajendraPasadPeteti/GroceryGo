@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useStore } from '../../context/StoreContext';
 import { useUI } from '../../context/UIContext';
 
 const Navbar = () => {
-  const { user, logout: _logout, isAuthenticated, isCustomer } = useAuth();
+  const { user, logout, isAuthenticated, isCustomer, isAdmin } = useAuth();
   const { getCartCount, updateDeliveryLocation, deliveryLocation } = useStore();
-  const { openModal, searchQuery, setSearchQuery, openSidebar } = useUI();
+  const { searchQuery, setSearchQuery } = useUI();
   const [cartCount, setCartCount] = useState(0);
-  const [location, setLocation] = useState('Vijayawada - 520001');
-  const [scrolled, setScrolled] = useState(false);
+  const [location, setLocation] = useState('Vijayawada');
+  const navigate = useNavigate();
+  const routerLocation = useLocation();
 
   useEffect(() => {
     const updateCount = () => setCartCount(getCartCount());
@@ -19,130 +21,163 @@ const Navbar = () => {
   }, [getCartCount]);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 10);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  useEffect(() => {
-    setLocation(deliveryLocation);
+    if (deliveryLocation) {
+      setLocation(deliveryLocation.split(' - ')[0] || deliveryLocation);
+    }
   }, [deliveryLocation]);
 
   const handleLocationChange = () => {
-    const newLocation = prompt('Enter delivery location (City - Pincode):', location);
+    const newLocation = prompt('Enter delivery location (e.g. Vijayawada - 520001):', deliveryLocation || 'Vijayawada - 520001');
     if (newLocation && newLocation.trim()) {
       updateDeliveryLocation(newLocation.trim());
-      setLocation(newLocation.trim());
+      setLocation(newLocation.trim().split(' - ')[0]);
     }
   };
 
-  const handleSearch = (e) => {
+  const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
-    // Search is handled by the page component
   };
 
-  const navLinks = [
-    { href: '/', label: 'Home' },
-    { href: '/#categories', label: 'Categories' },
-    { href: '/#featured', label: 'Featured' },
-    { href: '/#deals', label: 'Deals' },
-    { href: '/#products', label: 'Products' },
-    { href: '/support', label: 'Support' },
-  ];
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (routerLocation.pathname !== '/products') {
+      navigate(`/products?search=${encodeURIComponent(searchQuery)}`);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
-    <header className={`navbar ${scrolled ? 'navbar--scrolled' : ''}`} role="banner">
-      <div className="container navbar__container">
-        <a href="/" className="navbar__logo" aria-label="GroceryGo Home">
-          <span className="navbar__logo-icon" aria-hidden="true">🛒</span>
-          <span className="navbar__logo-text">GroceryGo</span>
-        </a>
+    <header className="navbar" role="banner">
+      <div className="navbar__container">
+        {/* Left: Brand Logo & Delivery Location */}
+        <div className="navbar__left">
+          <Link to="/" className="navbar__logo" aria-label="GroceryGo Home">
+            <span className="navbar__logo-icon" aria-hidden="true">🛒</span>
+            <span className="navbar__logo-text">GroceryGo</span>
+          </Link>
 
-        <button className="navbar__menu-btn" onClick={openSidebar} aria-label="Open menu" aria-expanded={false}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-          </svg>
-        </button>
-
-        <div className="navbar__search" role="search">
-          <label htmlFor="nav-search" className="visually-hidden">Search products</label>
-          <input
-            id="nav-search"
-            type="search"
-            className="search-input"
-            placeholder="Search groceries..."
-            value={searchQuery}
-            onChange={handleSearch}
-            autoComplete="off"
-          />
-          <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
+          <button
+            type="button"
+            className="navbar__location-btn"
+            onClick={handleLocationChange}
+            title="Change Delivery Location"
+          >
+            <span className="navbar__location-icon" aria-hidden="true">📍</span>
+            <span style={{ textAlign: 'left' }}>
+              <span className="navbar__location-sub">Deliver to</span>
+              <span className="navbar__location-main">{location}</span>
+            </span>
+          </button>
         </div>
 
-        <nav className="navbar__nav" role="navigation" aria-label="Main navigation">
-          <ul className="navbar__nav-list">
-            {navLinks.map(link => (
-              <li key={link.href}>
-                <a href={link.href} className="navbar__nav-link">{link.label}</a>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        {/* Center: Search Bar */}
+        <form onSubmit={handleSearchSubmit} className="navbar__search-wrapper" role="search">
+          <span className="navbar__search-icon" aria-hidden="true">🔍</span>
+          <input
+            type="search"
+            className="navbar__search-input"
+            placeholder="Search for groceries, fruits, vegetables..."
+            value={searchQuery}
+            onChange={handleSearchChange}
+            aria-label="Search products"
+          />
+        </form>
 
-        <div className="navbar__actions">
-          <button
-            className="navbar__location"
-            onClick={handleLocationChange}
-            aria-label={`Delivery location: ${location}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-              <circle cx="12" cy="10" r="3"></circle>
-            </svg>
-            <span className="navbar__location-text">
-              <strong>{location.split(' - ')[0]}</strong>
-            </span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-
-          {isAuthenticated() ? (
+        {/* Right Navigation */}
+        <nav className="navbar__right" aria-label="Main Navigation">
+          {isAuthenticated() && isCustomer() ? (
+            /* Logged in Customer Navigation */
             <>
-              {isCustomer() && (
-                <a href="/cart" className="navbar__cart" aria-label={`Cart: ${cartCount} items`}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <circle cx="9" cy="21" r="1"></circle>
-                    <circle cx="20" cy="21" r="1"></circle>
-                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-                  </svg>
-                  {cartCount > 0 && (
-                    <span className="navbar__cart-badge" aria-label={`${cartCount} items in cart`}>{cartCount}</span>
-                  )}
-                </a>
-              )}
-
-              <div className="navbar__user-menu">
-                <button className="navbar__user-btn" onClick={() => openModal('userMenu')} aria-label="User menu" aria-expanded="false">
-                  <div className="avatar avatar--sm">{user?.name?.charAt(0) || 'U'}</div>
-                  <span className="navbar__user-name">{user?.name}</span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <polyline points="18 15 12 9 6 15"></polyline>
-                  </svg>
-                </button>
-              </div>
+              <Link
+                to="/products"
+                className={`navbar__link ${routerLocation.pathname === '/products' || routerLocation.pathname === '/dashboard' ? 'navbar__link--active' : ''}`}
+              >
+                Shop
+              </Link>
+              <Link
+                to="/orders"
+                className={`navbar__link ${routerLocation.pathname === '/orders' ? 'navbar__link--active' : ''}`}
+              >
+                My Orders
+              </Link>
+              <Link to="/cart" className="navbar__cart-pill">
+                <span>🛒 Cart</span>
+                <span className="navbar__cart-badge">{cartCount}</span>
+              </Link>
+              <Link
+                to="/support"
+                className={`navbar__link ${routerLocation.pathname === '/support' ? 'navbar__link--active' : ''}`}
+              >
+                🎧 Support
+              </Link>
+              <Link
+                to="/profile"
+                className={`navbar__link ${routerLocation.pathname === '/profile' ? 'navbar__link--active' : ''}`}
+              >
+                👤 Profile
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="navbar__link"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626' }}
+              >
+                Logout
+              </button>
+            </>
+          ) : isAuthenticated() && isAdmin() ? (
+            /* Logged in Admin shortcut in customer navbar */
+            <>
+              <Link to="/admin/dashboard" className="btn btn--primary btn--sm" style={{ height: '36px' }}>
+                Admin Console
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="navbar__link"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626' }}
+              >
+                Logout
+              </button>
             </>
           ) : (
-            <div className="navbar__auth">
-              <a href="/login" className="btn btn--ghost btn--sm">Login</a>
-              <a href="/register" className="btn btn--primary btn--sm">Register</a>
-            </div>
+            /* Guest Navigation */
+            <>
+              <Link to="/" className={`navbar__link ${routerLocation.pathname === '/' ? 'navbar__link--active' : ''}`}>
+                Home
+              </Link>
+              <a href="/#categories" className="navbar__link">
+                Categories
+              </a>
+              <a href="/#featured" className="navbar__link">
+                Featured
+              </a>
+              <a href="/#deals" className="navbar__link">
+                Deals
+              </a>
+              <Link to="/products" className={`navbar__link ${routerLocation.pathname === '/products' ? 'navbar__link--active' : ''}`}>
+                Products
+              </Link>
+              <Link to="/support" className={`navbar__link ${routerLocation.pathname === '/support' ? 'navbar__link--active' : ''}`}>
+                Support
+              </Link>
+              <Link to="/login" className="navbar__link" style={{ fontWeight: 600 }}>
+                👤 Login
+              </Link>
+              <Link to="/register" className="navbar__link" style={{ color: '#16A34A', fontWeight: 700 }}>
+                Register
+              </Link>
+              <Link to="/cart" className="navbar__cart-pill">
+                <span>🛒 Cart</span>
+                <span className="navbar__cart-badge">{cartCount}</span>
+              </Link>
+            </>
           )}
-        </div>
+        </nav>
       </div>
     </header>
   );

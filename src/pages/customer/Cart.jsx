@@ -1,246 +1,332 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
-import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
 const Cart = () => {
-  const { cart, updateCartQuantity, removeFromCart, calculateTotals, getCouponByCode } = useStore();
-  const { protectPage } = useAuth();
+  const { cart, updateCartQuantity, removeFromCart, clearCart, getCouponByCode } = useStore();
   const { showToast } = useUI();
-  const [couponCode, setCouponCode] = useState('');
+  const navigate = useNavigate();
+
+  const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
-  const [totals, setTotals] = useState({ subtotal: 0, deliveryFee: 0, discount: 0, total: 0 });
 
-  useEffect(() => {
-    protectPage('user');
-  }, [protectPage]);
+  const subtotal = useMemo(() => {
+    return cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  }, [cart]);
 
-  useEffect(() => {
-    recalcTotals();
-  }, [cart, couponCode]);
-
-  const recalcTotals = () => {
-    const calculated = calculateTotals(cart, couponCode || null);
-    setTotals(calculated);
-    if (calculated.appliedCoupon !== appliedCoupon) {
-      setAppliedCoupon(calculated.appliedCoupon);
+  const discount = useMemo(() => {
+    if (!appliedCoupon) return 0;
+    if (appliedCoupon.type === 'percentage') {
+      return Math.round((subtotal * appliedCoupon.value) / 100);
     }
-  };
+    return Math.min(appliedCoupon.value, subtotal);
+  }, [subtotal, appliedCoupon]);
 
-  const handleCouponApply = () => {
-    const coupon = getCouponByCode(couponCode.toUpperCase());
-    if (coupon && coupon.active) {
-      const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      if (subtotal >= coupon.minOrder) {
-        setAppliedCoupon(coupon);
-        showToast(`Coupon applied: ${coupon.description}`, 'success');
-      } else {
-        showToast(`Minimum order ₹${coupon.minOrder} required`, 'warning');
-        setCouponCode('');
-      }
-    } else {
-      showToast('Invalid or expired coupon code', 'error');
-    }
-  };
+  const deliveryFee = subtotal >= 300 || subtotal === 0 ? 0 : 40;
+  const total = Math.max(0, subtotal - discount + deliveryFee);
 
-  const handleCouponRemove = () => {
-    setCouponCode('');
-    setAppliedCoupon(null);
-  };
-
-  const handleQuantityChange = (productId, delta) => {
+  const handleQuantity = (productId, delta) => {
     updateCartQuantity(productId, delta);
+    window.dispatchEvent(new CustomEvent('cart-updated'));
   };
 
   const handleRemove = (productId) => {
     removeFromCart(productId);
     showToast('Item removed from cart', 'info');
+    window.dispatchEvent(new CustomEvent('cart-updated'));
   };
 
-  if (cart.length === 0) {
-    return (
-      <div className="cart-page">
-        <header className="page-header" role="heading" aria-level="1">
-          <div className="page-header__left">
-            <nav className="breadcrumb" aria-label="Breadcrumb">
-              <ol className="breadcrumb__list">
-                <li className="breadcrumb__item"><span className="breadcrumb__current" aria-current="page">Cart</span></li>
-              </ol>
-            </nav>
-            <div>
-              <h1 className="page-header__title">Shopping Cart</h1>
-            </div>
-          </div>
-        </header>
+  const handleClearAll = () => {
+    if (window.confirm('Clear all items from your cart?')) {
+      clearCart();
+      showToast('Cart cleared', 'info');
+      window.dispatchEvent(new CustomEvent('cart-updated'));
+    }
+  };
 
-        <div className="container">
-          <div className="card" style={{ maxWidth: '500px', margin: 'var(--space-16) auto', padding: 'var(--space-12)', textAlign: 'center' }}>
-            <div style={{ fontSize: '4rem', marginBottom: 'var(--space-4)' }}>🛍️</div>
-            <h3 className="text-xl font-semibold" style={{ marginBottom: 'var(--space-2)' }}>Your cart is empty</h3>
-            <p style={{ color: 'var(--color-text-secondary)', marginBottom: 'var(--space-6)' }}>Add some fresh groceries to get started</p>
-            <Link to="/dashboard" className="btn btn--primary btn--lg">Start Shopping</Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleApplyCoupon = (e) => {
+    e.preventDefault();
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
+
+    const coupon = getCouponByCode ? getCouponByCode(code) : null;
+    if (coupon && coupon.active !== false) {
+      if (subtotal < (coupon.minOrder || coupon.minimumCartSpend || 0)) {
+        showToast(`Minimum cart spend ₹${coupon.minOrder || coupon.minimumCartSpend} required for this coupon`, 'warning');
+        return;
+      }
+      setAppliedCoupon({
+        code: coupon.code,
+        value: coupon.discount || coupon.value || 100,
+        type: 'fixed',
+      });
+      showToast(`Coupon ${code} applied successfully!`, 'success');
+    } else if (code === 'GROCERY100') {
+      if (subtotal < 500) {
+        showToast('Minimum cart spend ₹500 required for GROCERY100', 'warning');
+        return;
+      }
+      setAppliedCoupon({ code: 'GROCERY100', value: 100, type: 'fixed' });
+      showToast('₹100 discount applied!', 'success');
+    } else if (code === 'WELCOME50') {
+      if (subtotal < 250) {
+        showToast('Minimum cart spend ₹250 required for WELCOME50', 'warning');
+        return;
+      }
+      setAppliedCoupon({ code: 'WELCOME50', value: 50, type: 'fixed' });
+      showToast('₹50 discount applied!', 'success');
+    } else {
+      showToast('Invalid coupon code', 'error');
+    }
+  };
+
+  const totalItemsCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
-    <div className="cart-page">
-      <header className="page-header" role="heading" aria-level="1">
-        <div className="page-header__left">
-          <nav className="breadcrumb" aria-label="Breadcrumb">
-            <ol className="breadcrumb__list">
-              <li className="breadcrumb__item"><span className="breadcrumb__current" aria-current="page">Cart</span></li>
-            </ol>
-          </nav>
-          <div>
-            <h1 className="page-header__title">Shopping Cart</h1>
-            <p className="page-header__subtitle">{cart.length} item{cart.length !== 1 ? 's' : ''} in your cart</p>
-          </div>
+    <div style={{ background: '#F8FAF9', minHeight: '80vh', padding: '36px 0 64px' }}>
+      <div className="container">
+        {/* Page Heading */}
+        <div style={{ marginBottom: '28px' }}>
+          <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#1F2937', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>🛒</span>
+            <span>Your Shopping Cart</span>
+          </h1>
+          <p style={{ fontSize: '14px', color: '#6B7280', marginTop: '4px' }}>
+            Review items in your cart and proceed to checkout.
+          </p>
         </div>
-      </header>
 
-        <div className="container">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: 'var(--space-8)' }}>
-            {/* Cart Items */}
-            <div className="cart-items">
-              <div className="card" style={{ overflow: 'hidden' }}>
-                <div className="table-responsive">
-                  <table className="table" role="table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Product</th>
-                        <th scope="col">Price</th>
-                        <th scope="col">Quantity</th>
-                        <th scope="col">Total</th>
-                        <th scope="col"><span className="visually-hidden">Actions</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cart.map(item => (
-                        <tr key={item.id}>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-                              <span style={{ fontSize: '2.5rem' }}>{item.icon}</span>
-                              <div>
-                                <h4 className="font-medium">{item.name}</h4>
-                                <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>{item.unit}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td><span style={{ fontWeight: '500' }}>₹{item.price}</span></td>
-                          <td>
-                            <div className="quantity-control" style={{ maxWidth: '140px' }}>
-                              <button
-                                className="quantity-btn"
-                                onClick={() => handleQuantityChange(item.productId, -1)}
-                                aria-label="Decrease quantity"
-                              >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                              </button>
-                              <input
-                                type="text"
-                                className="quantity-value"
-                                value={item.quantity}
-                                readOnly
-                                aria-label="Quantity"
-                              />
-                              <button
-                                className="quantity-btn"
-                                onClick={() => handleQuantityChange(item.productId, 1)}
-                                aria-label="Increase quantity"
-                              >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                              </button>
-                            </div>
-                          </td>
-                          <td><strong>₹{item.price * item.quantity}</strong></td>
-                          <td>
-                            <button
-                              className="btn btn--ghost btn--sm btn--icon"
-                              onClick={() => handleRemove(item.productId)}
-                              aria-label={`Remove ${item.name} from cart`}
-                            >
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                <polyline points="3 6 5 6 21 6"></polyline>
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+        {cart.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '28px', alignItems: 'flex-start' }}>
+            {/* Left Column: Cart Items Card */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid #F3F4F6', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937' }}>
+                  Cart Items ({totalItemsCount})
+                </h2>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  style={{ background: 'none', border: 'none', color: '#DC2626', fontWeight: 600, fontSize: '13.5px', cursor: 'pointer' }}
+                >
+                  Clear All
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {cart.map(item => (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 0',
+                      borderBottom: '1px solid #F3F4F6',
+                      gap: '16px',
+                    }}
+                  >
+                    {/* Item Info */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                      <div
+                        style={{
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '12px',
+                          background: '#F9FAFB',
+                          border: '1px solid #E5E7EB',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '28px',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {item.icon || '🍏'}
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1F2937' }}>{item.name}</h3>
+                        <div style={{ fontSize: '12.5px', color: '#6B7280', margin: '2px 0 4px' }}>
+                          {item.category} • {item.unit || '1 kg'}
+                        </div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#16A34A' }}>
+                          ₹{item.price} each
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quantity Controls */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '8px',
+                        background: '#FFFFFF',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleQuantity(item.id, -1)}
+                        style={{ width: '32px', height: '32px', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 700, color: '#4B5563', fontSize: '16px' }}
+                      >
+                        -
+                      </button>
+                      <span style={{ width: '32px', textAlign: 'center', fontSize: '14px', fontWeight: 700, color: '#1F2937' }}>
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleQuantity(item.id, 1)}
+                        style={{ width: '32px', height: '32px', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 700, color: '#4B5563', fontSize: '16px' }}
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Total Price */}
+                    <div style={{ minWidth: '70px', textAlign: 'right', fontWeight: 800, fontSize: '16px', color: '#1F2937' }}>
+                      ₹{item.price * item.quantity}
+                    </div>
+
+                    {/* Delete Icon */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(item.id)}
+                      title="Remove item"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#9CA3AF', padding: '4px' }}
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Cart Summary */}
-            <aside style={{ position: 'sticky', top: 'var(--space-6)' }}>
-              <div className="card" style={{ padding: 'var(--space-6)' }}>
-                <h3 className="text-lg font-semibold" style={{ marginBottom: 'var(--space-6)' }}>Order Summary</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Subtotal ({cart.length} items)</span>
-                    <span className="font-medium">₹{totals.subtotal}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>Delivery Fee</span>
-                    <span className="font-medium">{totals.deliveryFee === 0 ? 'Free' : `₹${totals.deliveryFee}`}</span>
-                  </div>
-                  {totals.discount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-error)' }}>
-                      <span>Discount {appliedCoupon && `(${appliedCoupon.code})`}</span>
-                      <span>−₹{totals.discount}</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 'var(--space-4)', borderTop: '1px solid var(--color-border)' }}>
-                    <span className="font-semibold text-lg">Total Payable</span>
-                    <span className="font-semibold text-lg" style={{ color: 'var(--color-primary)' }}>₹{totals.total}</span>
-                  </div>
+            {/* Right Column: Order Summary Card */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', marginBottom: '18px' }}>
+                Order Summary
+              </h2>
+
+              {/* Coupon Form */}
+              <form onSubmit={handleApplyCoupon} style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                <input
+                  type="text"
+                  placeholder="COUPON CODE (E.G. GROCERY100)"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    height: '42px',
+                    padding: '0 12px',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '8px',
+                    fontSize: '12.5px',
+                    textTransform: 'uppercase',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="submit"
+                  style={{
+                    height: '42px',
+                    padding: '0 18px',
+                    background: '#FFFFFF',
+                    border: '1px solid #16A34A',
+                    color: '#16A34A',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    fontSize: '13.5px',
+                    cursor: 'pointer',
+                    transition: 'all 150ms ease',
+                  }}
+                >
+                  Apply
+                </button>
+              </form>
+
+              {appliedCoupon && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F0FDF4', border: '1px solid #DCFCE7', borderRadius: '8px', padding: '8px 12px', marginBottom: '16px', fontSize: '13px', color: '#15803D' }}>
+                  <span>🏷️ <strong>{appliedCoupon.code}</strong> applied</span>
+                  <button type="button" onClick={() => setAppliedCoupon(null)} style={{ border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontWeight: 600 }}>
+                    Remove
+                  </button>
+                </div>
+              )}
+
+              {/* Breakdown */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px', color: '#4B5563', paddingBottom: '16px', borderBottom: '1px solid #F3F4F6' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Subtotal</span>
+                  <span style={{ fontWeight: 600, color: '#1F2937' }}>₹{subtotal}</span>
                 </div>
 
-                <div style={{ marginBottom: 'var(--space-6)' }}>
-                  {appliedCoupon ? (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--space-4)', background: 'var(--color-success-bg)', border: '1px solid var(--color-success)', borderRadius: 'var(--radius-md)' }}>
-                      <span style={{ color: 'var(--color-primary-dark)', fontWeight: '500' }}>Applied: {appliedCoupon.code}</span>
-                      <button className="btn btn--ghost btn--sm" onClick={handleCouponRemove}>Remove</button>
-                    </div>
-                  ) : (
-                    <div>
-                      <label htmlFor="coupon" className="input-label" style={{ marginBottom: 'var(--space-2)' }}>Coupon Code</label>
-                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        <input
-                          id="coupon"
-                          type="text"
-                          className="input"
-                          placeholder="Enter coupon code"
-                          value={couponCode}
-                          onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                          onKeyDown={(e) => e.key === 'Enter' && handleCouponApply()}
-                          style={{ flex: 1 }}
-                        />
-                        <button className="btn btn--primary" onClick={handleCouponApply}>Apply</button>
-                      </div>
-                      <p className="input-helper" style={{ marginTop: 'var(--space-2)' }}>Try: GROCERY100, FRESH20, WELCOME50</p>
-                    </div>
-                  )}
-                </div>
-
-                {totals.deliveryFee > 0 && (
-                  <p style={{ color: 'var(--color-primary)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--color-primary-light)', borderRadius: 'var(--radius-md)' }}>Add ₹{300 - totals.subtotal} more for free delivery!</p>
+                {discount > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16A34A' }}>
+                    <span>Coupon Discount</span>
+                    <span style={{ fontWeight: 600 }}>-₹{discount}</span>
+                  </div>
                 )}
 
-                <Link to="/checkout" className="btn btn--primary btn--full btn--lg">
-                  Proceed to Checkout →
-                </Link>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Estimated Delivery</span>
+                  <span style={{ fontWeight: 700, color: deliveryFee === 0 ? '#16A34A' : '#1F2937' }}>
+                    {deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`}
+                  </span>
+                </div>
               </div>
-            </aside>
+
+              {/* Free Delivery unlocked alert banner */}
+              <div
+                style={{
+                  background: '#F0FDF4',
+                  border: '1px solid #DCFCE7',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  margin: '16px 0',
+                  fontSize: '13px',
+                  color: '#15803D',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>🎉</span>
+                <span>Congratulations! You have unlocked <strong>FREE Delivery</strong></span>
+              </div>
+
+              {/* Total Amount */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '20px 0 24px' }}>
+                <span style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937' }}>Total Amount</span>
+                <span style={{ fontSize: '24px', fontWeight: 900, color: '#16A34A' }}>₹{total}</span>
+              </div>
+
+              {/* Proceed Button */}
+              <button
+                type="button"
+                onClick={() => navigate('/checkout')}
+                className="btn btn--primary btn--full"
+                style={{ height: '48px', fontSize: '15px', fontWeight: 700 }}
+              >
+                Proceed to Checkout →
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="empty-state" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '64px' }}>
+            <div className="empty-state__icon">🛒</div>
+            <h2 className="empty-state__title">Your shopping cart is empty</h2>
+            <p className="empty-state__desc">Browse our fresh grocery catalog and add items to your cart.</p>
+            <Link to="/products" className="btn btn--primary">
+              Start Shopping
+            </Link>
+          </div>
+        )}
       </div>
+    </div>
   );
 };
 

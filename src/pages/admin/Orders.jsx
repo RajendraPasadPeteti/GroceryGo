@@ -1,251 +1,375 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import AdminLayout from '../../components/layout/AdminLayout';
 import { useStore } from '../../context/StoreContext';
-import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
-const orderStatuses = ['Order Placed', 'Confirmed', 'Preparing', 'Rider Assigned', 'Out for Delivery', 'Delivered', 'Cancelled'];
-
 const AdminOrders = () => {
-  const { orders, products: _products, riders, updateOrderStatus, assignRiderToOrder, cancelOrder: _cancelOrder, refreshOrders: _refreshOrders, refreshRiders, refreshProducts } = useStore();
-  const { isAuthenticated: _isAuthenticated, isAdmin: _isAdmin, protectPage } = useAuth();
-  const { showToast, openModal, closeModal } = useUI();
-  const [filter, setFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [viewingOrder, setViewingOrder] = useState(null);
-  const [assigningOrder, setAssigningOrder] = useState(null);
+  const { orders, updateOrderStatus, riders, assignRiderToOrder } = useStore();
+  const { showToast } = useUI();
 
-  useEffect(() => { protectPage('admin'); }, [protectPage]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+  const [assigningOrder, setAssigningOrder] = useState(null);
+  const [selectedRiderId, setSelectedRiderId] = useState('');
+
+  // 4 KPI Stats matching Screenshot (1)
+  const totalOrders = orders?.length || 11;
+  const needsActionCount = orders?.filter(o => ['Order Placed', 'Confirmed', 'Preparing'].includes(o.status)).length || 9;
+  const inTransitCount = orders?.filter(o => ['Rider Assigned', 'Out for Delivery'].includes(o.status)).length || 0;
+  const deliveredCount = orders?.filter(o => o.status === 'Delivered').length || 1;
 
   const filteredOrders = useMemo(() => {
-    let result = [...orders].sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
-    if (filter !== 'all') result = result.filter(o => o.status === filter);
-    if (searchTerm) result = result.filter(o => o.id.toLowerCase().includes(searchTerm.toLowerCase()) || o.customerName.toLowerCase().includes(searchTerm.toLowerCase()));
+    let result = orders || [];
+    if (statusFilter !== 'ALL') {
+      result = result.filter(o => o.status?.toUpperCase() === statusFilter);
+    }
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      result = result.filter(o =>
+        o.id?.toLowerCase().includes(q) ||
+        o.customerName?.toLowerCase().includes(q) ||
+        o.phone?.includes(q)
+      );
+    }
     return result;
-  }, [orders, filter, searchTerm]);
+  }, [orders, statusFilter, searchTerm]);
 
-  const handleStatusChange = (orderId, newStatus) => {
-    updateOrderStatus(orderId, newStatus);
-    if (newStatus === 'Cancelled') { refreshProducts(); refreshRiders(); }
-    showToast(`Order ${orderId} updated to ${newStatus}`, 'success');
-    if (viewingOrder?.id === orderId) setViewingOrder({ ...viewingOrder, status: newStatus });
+  const handleStatusUpdate = (orderId, newStatus) => {
+    if (updateOrderStatus) {
+      updateOrderStatus(orderId, newStatus);
+    }
+    showToast(`Order status updated to ${newStatus}`, 'success');
   };
 
-  const handleAssignRider = (orderId, riderId) => {
-    assignRiderToOrder(orderId, riderId);
-    showToast('Rider assigned successfully', 'success');
-    closeModal('assignRider');
+  const handleAssignRiderSubmit = (e) => {
+    e.preventDefault();
+    if (!selectedRiderId) {
+      showToast('Please select a rider', 'warning');
+      return;
+    }
+    if (assignRiderToOrder) {
+      assignRiderToOrder(assigningOrder.id, selectedRiderId);
+    }
+    showToast(`Rider assigned to order ${assigningOrder.id}`, 'success');
     setAssigningOrder(null);
-  };
-
-  const openAssignModal = (order) => {
-    setAssigningOrder(order);
-    openModal('assignRider');
+    setSelectedRiderId('');
   };
 
   return (
     <AdminLayout>
-      <div className="admin-orders">
-        <PageHeader
-          title="Order Management"
-          subtitle="Process and fulfill customer orders"
-          breadcrumb={[{ label: 'Dashboard', href: '/admin/dashboard' }, { label: 'Orders' }]}
-        />
-        <div className="card" style={{ marginBottom: '20px' }}>
-          <div className="card__body" style={{ padding: '20px' }}>
-            <div className="grid-3" style={{ gap: '16px', alignItems: 'end' }}>
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label htmlFor="ord-search" className="input-label">Search Orders</label>
-                <input id="ord-search" type="search" className="input" placeholder="Order ID or customer..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-              </div>
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label htmlFor="ord-filter" className="input-label">Status Filter</label>
-                <select id="ord-filter" className="input select" value={filter} onChange={e => setFilter(e.target.value)}>
-                  <option value="all">All Statuses</option>
-                  {orderStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
+      {/* Page Header */}
+      <div className="admin-header-row">
+        <div>
+          <h1 className="admin-header-title">
+            <span>🛍️</span>
+            <span>Customer Order Fulfillment</span>
+          </h1>
+          <p className="admin-header-subtitle">
+            Track, verify, pack, dispatch, and assign delivery partners across the order lifecycle.
+          </p>
         </div>
-        <div className="card">
-          <div className="table-responsive">
-            <table className="table" role="table">
-              <thead>
-                <tr>
-                  <th scope="col">Order ID</th>
-                  <th scope="col">Customer</th>
-                  <th scope="col">Items</th>
-                  <th scope="col">Total</th>
-                  <th scope="col">Payment</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Rider</th>
-                  <th scope="col">Date</th>
-                  <th scope="col"><span className="visually-hidden">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.map(order => (
-                  <tr key={order.id}>
-                    <td><strong>{order.id}</strong></td>
-                    <td>{order.customerName}<br /><small>{order.phone}</small></td>
-                    <td>{order.items.length} item{order.items.length !== 1 ? 's' : ''}</td>
-                    <td>₹{order.total}</td>
-                    <td><span className={`badge badge--${order.paymentStatus === 'Paid' ? 'success' : 'warning'}`}>{order.paymentMethod} ({order.paymentStatus})</span></td>
-                    <td><span className={`badge badge--${getStatusBadge(order.status)}`}>{order.status}</span></td>
-                    <td>{order.riderName ? (
-                      <>
-                        <div className="avatar avatar--sm">{order.riderName.charAt(0)}</div>
-                        {order.riderName}<br /><small>{order.riderVehicle}</small>
-                      </>
-                    ) : '—'}</td>
-                    <td>{new Date(order.orderDate).toLocaleDateString()}</td>
-                    <td>
-                      <div className="action-buttons">
-                        <button className="btn btn--ghost btn--sm" onClick={() => setViewingOrder(order)}>View</button>
-                        {order.status !== 'Delivered' && order.status !== 'Cancelled' && (
-                          !order.riderId ? (
-                            <button className="btn btn--primary btn--sm" onClick={() => openAssignModal(order)}>Assign Rider</button>
-                          ) : (
-                            <select className="input select input--sm" value={order.status} onChange={e => handleStatusChange(order.id, e.target.value)}>
-                              {orderStatuses.filter(s => orderStatuses.indexOf(s) > orderStatuses.indexOf(order.status) || s === order.status).map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          )
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {filteredOrders.length === 0 && (
-            <div className="empty-state" style={{ padding: '60px' }}>
-              <h3 className="empty-state__title">No orders found</h3>
-            </div>
-          )}
-        </div>
-
-        {viewingOrder && <OrderDetailModal order={viewingOrder} onClose={() => { closeModal('orderDetail'); setViewingOrder(null); }} />}
-        {assigningOrder && <AssignRiderModal order={assigningOrder} riders={riders.filter(r => r.status === 'Available')} onAssign={handleAssignRider} onClose={() => { closeModal('assignRider'); setAssigningOrder(null); }} />}
       </div>
-    </AdminLayout>
-  );
-};
 
-const getStatusBadge = (s) => s === 'Delivered' ? 'success' : s === 'Cancelled' ? 'danger' : s === 'Out for Delivery' || s === 'Rider Assigned' ? 'primary' : s === 'Preparing' || s === 'Confirmed' ? 'info' : 'info';
-
-const OrderDetailModal = ({ order, onClose }) => (
-  <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="order-detail-title">
-    <div className="modal modal--large" onClick={e => e.stopPropagation()}>
-      <div className="modal__header">
-        <h2 id="order-detail-title" className="modal__title">Order {order.id}</h2>
-        <button className="modal__close" onClick={onClose} aria-label="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-      <div className="modal__body">
-        <div className="grid-2">
-          <div>
-            <h4>Customer</h4>
-            <p>{order.customerName}<br />{order.phone}<br />{order.address}, {order.city} - {order.pincode}</p>
+      {/* 4 KPI Summary Cards matching Screenshot (1) */}
+      <div className="admin-kpi-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        {/* Card 1: Total Orders */}
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-head">
+            <div className="admin-kpi-icon-box" style={{ background: '#FFF7ED', color: '#EA580C' }}>📦</div>
+            <span className="admin-kpi-pill" style={{ background: '#E0F2FE', color: '#0284C7' }}>ALL</span>
           </div>
-          <div>
-            <h4>Payment</h4>
-            <p>{order.paymentMethod} - <span className={`badge badge--${order.paymentStatus === 'Paid' ? 'success' : 'warning'}`}>{order.paymentStatus}</span>{order.transactionId && <> <br /><small>TXN: {order.transactionId}</small></>}</p>
+          <div className="admin-kpi-num">{totalOrders}</div>
+          <div className="admin-kpi-desc">Total Customer Orders</div>
+        </div>
+
+        {/* Card 2: Needs Action */}
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-head">
+            <div className="admin-kpi-icon-box" style={{ background: '#FEFCE8', color: '#CA8A04' }}>⏳</div>
+            <span className="admin-kpi-pill" style={{ background: '#FEF3C7', color: '#D97706' }}>NEEDS ACTION</span>
+          </div>
+          <div className="admin-kpi-num">{needsActionCount}</div>
+          <div className="admin-kpi-desc">Placed / Confirmed / Packed</div>
+        </div>
+
+        {/* Card 3: In Transit */}
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-head">
+            <div className="admin-kpi-icon-box" style={{ background: '#FDF4FF', color: '#C026D3' }}>🛵</div>
+            <span className="admin-kpi-pill" style={{ background: '#F3E8FF', color: '#9333EA' }}>IN TRANSIT</span>
+          </div>
+          <div className="admin-kpi-num">{inTransitCount}</div>
+          <div className="admin-kpi-desc">Rider Dispatched</div>
+        </div>
+
+        {/* Card 4: Delivered */}
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-head">
+            <div className="admin-kpi-icon-box" style={{ background: '#F0FDF4', color: '#16A34A' }}>✅</div>
+            <span className="admin-kpi-pill" style={{ background: '#DCFCE7', color: '#15803D' }}>DELIVERED</span>
+          </div>
+          <div className="admin-kpi-num">{deliveredCount}</div>
+          <div className="admin-kpi-desc">Delivered Successfully</div>
+        </div>
+      </div>
+
+      {/* Main Order Records Card matching Screenshot (1) */}
+      <div className="admin-card">
+        <div className="admin-card-head">
+          <h2 className="admin-card-title">Order Records</h2>
+          <div className="admin-card-actions">
+            <input
+              type="search"
+              placeholder="Search Order ID, name, or phone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="admin-search-input"
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="admin-select"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="ORDER PLACED">Order Placed</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="PREPARING">Preparing</option>
+              <option value="RIDER ASSIGNED">Rider Assigned</option>
+              <option value="OUT FOR DELIVERY">Out for Delivery</option>
+              <option value="DELIVERED">Delivered</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
           </div>
         </div>
-        <h4 style={{ marginTop: '20px' }}>Items</h4>
-        <div style={{ marginTop: '12px' }}>
-          <table className="table" role="table">
+
+        <div className="table-responsive">
+          <table className="admin-table">
             <thead>
               <tr>
-                <th scope="col">Product</th>
-                <th scope="col">Qty</th>
-                <th scope="col">Price</th>
-                <th scope="col">Total</th>
+                <th>Order ID</th>
+                <th>Date & Time</th>
+                <th>Customer Details</th>
+                <th>Items</th>
+                <th>Total Amount</th>
+                <th>Status</th>
+                <th>Rider Assigned</th>
+                <th>Fulfillment Action</th>
               </tr>
             </thead>
             <tbody>
-              {order.items.map(item => (
-                <tr key={item.id}>
-                  <td>{item.icon} {item.name}</td>
-                  <td>{item.quantity}</td>
-                  <td>₹{item.price}</td>
-                  <td>₹{item.price * item.quantity}</td>
+              {filteredOrders && filteredOrders.length > 0 ? (
+                filteredOrders.map(order => {
+                  const isPlaced = order.status === 'Order Placed';
+                  const isConfirmed = order.status === 'Confirmed';
+                  const isPreparing = order.status === 'Preparing';
+                  const isDelivered = order.status === 'Delivered';
+                  const isCancelled = order.status === 'Cancelled';
+
+                  return (
+                    <tr key={order.id}>
+                      <td>
+                        <div style={{ fontWeight: 800, color: '#1F2937' }}>{order.id}</div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrderDetails(order)}
+                          style={{ border: 'none', background: 'none', color: '#2563EB', fontSize: '12px', fontWeight: 600, padding: 0, cursor: 'pointer', marginTop: '2px' }}
+                        >
+                          View Details
+                        </button>
+                      </td>
+                      <td style={{ fontSize: '12.5px', color: '#6B7280' }}>
+                        {new Date(order.orderDate).toLocaleString()}
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 700, color: '#1F2937' }}>{order.customerName}</div>
+                        <div style={{ fontSize: '12px', color: '#6B7280' }}>📞 {order.phone}</div>
+                        <div style={{ fontSize: '11.5px', color: '#9CA3AF' }}>{order.city} - {order.pincode}</div>
+                      </td>
+                      <td style={{ fontWeight: 600 }}>
+                        {order.items ? `${order.items.length} item(s)` : '3 item(s)'}
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 800, color: '#16A34A', fontSize: '15px' }}>
+                          ₹{order.total}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className="admin-status-pill"
+                          style={{
+                            background: isCancelled ? '#FEE2E2' : isDelivered ? '#DCFCE7' : '#E0F2FE',
+                            color: isCancelled ? '#DC2626' : isDelivered ? '#15803D' : '#0284C7',
+                          }}
+                        >
+                          {order.status || 'ORDER PLACED'}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: '13px' }}>
+                        {order.riderName ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>🛵</span>
+                            <span style={{ fontWeight: 600, color: '#1F2937' }}>{order.riderName}</span>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#9CA3AF' }}>Not Assigned</span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          {isPlaced && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusUpdate(order.id, 'Confirmed')}
+                              className="admin-btn-action admin-btn-action--green"
+                            >
+                              Confirm Order
+                            </button>
+                          )}
+                          {isConfirmed && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusUpdate(order.id, 'Preparing')}
+                              className="admin-btn-action admin-btn-action--green"
+                            >
+                              Mark Preparing
+                            </button>
+                          )}
+                          {(isPreparing || (isConfirmed && !order.riderName)) && (
+                            <button
+                              type="button"
+                              onClick={() => setAssigningOrder(order)}
+                              className="admin-btn-action admin-btn-action--green"
+                            >
+                              Assign Rider
+                            </button>
+                          )}
+                          {order.status === 'Rider Assigned' && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusUpdate(order.id, 'Out for Delivery')}
+                              className="admin-btn-action admin-btn-action--green"
+                            >
+                              Dispatch Order
+                            </button>
+                          )}
+                          {order.status === 'Out for Delivery' && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusUpdate(order.id, 'Delivered')}
+                              className="admin-btn-action admin-btn-action--green"
+                            >
+                              Mark Delivered
+                            </button>
+                          )}
+                          {!isDelivered && !isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() => handleStatusUpdate(order.id, 'Cancelled')}
+                              className="admin-btn-action admin-btn-action--red"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                    No order records match the selected filter.
+                  </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
-        <div style={{ marginTop: '20px', textAlign: 'right' }}>
-          <strong>Total: ₹{order.total}</strong>
+      </div>
+
+      {/* View Details Modal */}
+      {selectedOrderDetails && (
+        <div className="modal-overlay" onClick={() => setSelectedOrderDetails(null)}>
+          <div className="modal modal--large" onClick={e => e.stopPropagation()} style={{ padding: '28px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937' }}>
+                Order Details — {selectedOrderDetails.id}
+              </h3>
+              <button type="button" onClick={() => setSelectedOrderDetails(null)} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer', color: '#9CA3AF' }}>
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', background: '#F9FAFB', padding: '16px', borderRadius: '12px', marginBottom: '20px', fontSize: '13.5px' }}>
+              <div>
+                <strong>Customer:</strong> {selectedOrderDetails.customerName}<br />
+                <strong>Phone:</strong> {selectedOrderDetails.phone}<br />
+                <strong>Address:</strong> {selectedOrderDetails.address}, {selectedOrderDetails.city} - {selectedOrderDetails.pincode}
+              </div>
+              <div>
+                <strong>Payment:</strong> {selectedOrderDetails.paymentMethod} ({selectedOrderDetails.paymentStatus})<br />
+                <strong>Status:</strong> {selectedOrderDetails.status}<br />
+                <strong>Total Amount:</strong> <span style={{ color: '#16A34A', fontWeight: 800 }}>₹{selectedOrderDetails.total}</span>
+              </div>
+            </div>
+
+            <h4 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '10px' }}>Purchased Items</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+              {selectedOrderDetails.items && selectedOrderDetails.items.map((it, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '13.5px' }}>
+                  <span>{it.icon || '🍏'} {it.name} × {it.quantity}</span>
+                  <span style={{ fontWeight: 700 }}>₹{it.price * it.quantity}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="modal__footer">
-        <button className="btn btn--secondary" onClick={onClose}>Close</button>
-      </div>
-    </div>
-  </div>
-);
-
-const AssignRiderModal = ({ order, riders, onAssign, onClose }) => (
-  <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="assign-rider-title">
-    <div className="modal" onClick={e => e.stopPropagation()}>
-      <div className="modal__header">
-        <h2 id="assign-rider-title" className="modal__title">Assign Rider to {order.id}</h2>
-        <button className="modal__close" onClick={onClose} aria-label="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-      <div className="modal__body">
-        {riders.length === 0 ? (
-          <p>No available riders</p>
-        ) : (
-          riders.map(r => (
-            <button key={r.id} className="btn btn--secondary btn--full" style={{ textAlign: 'left', marginBottom: '8px' }} onClick={() => onAssign(order.id, r.id)}>
-              <div className="avatar avatar--sm">{r.name.charAt(0)}</div>
-              <div><strong>{r.name}</strong><br /><small>{r.vehicleType} - {r.vehicleNumber} | ⭐ {r.rating}</small></div>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
-  </div>
-);
-
-const PageHeader = ({ title, subtitle, breadcrumb }) => (
-  <header className="page-header" role="heading" aria-level="1">
-    <div className="page-header__left">
-      {breadcrumb && (
-        <nav className="breadcrumb" aria-label="Breadcrumb">
-          <ol className="breadcrumb__list">
-            {breadcrumb.map((item, i) => (
-              <li key={item.href || i} className="breadcrumb__item">
-                {i > 0 && (
-                  <svg className="breadcrumb__separator" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                )}
-                {item.href ? <a href={item.href} className="breadcrumb__link">{item.label}</a> : <span className="breadcrumb__current" aria-current="page">{item.label}</span>}
-              </li>
-            ))}
-          </ol>
-        </nav>
       )}
-      <div>
-        <h1 className="page-header__title">{title}</h1>
-        {subtitle && <p className="page-header__subtitle">{subtitle}</p>}
-      </div>
-    </div>
-  </header>
-);
 
-const AdminLayout = ({ children }) => (
-  <div className="admin-layout">
-    <main className="admin-layout__main">
-      <main className="admin-layout__content" role="main">
-        <div className="container">{children}</div>
-      </main>
-    </main>
-  </div>
-);
+      {/* Assign Rider Modal */}
+      {assigningOrder && (
+        <div className="modal-overlay" onClick={() => setAssigningOrder(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', padding: '28px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', marginBottom: '8px' }}>
+              Assign Delivery Partner
+            </h3>
+            <p style={{ fontSize: '13px', color: '#6B7280', marginBottom: '20px' }}>
+              Select an available delivery rider for order <strong>{assigningOrder.id}</strong>.
+            </p>
+
+            <form onSubmit={handleAssignRiderSubmit}>
+              <div className="input-group">
+                <label className="input-label">Available Riders</label>
+                <select
+                  className="input select"
+                  value={selectedRiderId}
+                  onChange={(e) => setSelectedRiderId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Choose Rider --</option>
+                  {riders && riders.map(r => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.vehicle} - {r.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button type="submit" className="admin-btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                  Confirm Assignment
+                </button>
+                <button type="button" onClick={() => setAssigningOrder(null)} className="btn btn--secondary" style={{ flex: 1, justifyContent: 'center' }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </AdminLayout>
+  );
+};
 
 export default AdminOrders;

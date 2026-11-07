@@ -21,7 +21,6 @@ const ProductDetail = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
 
   useEffect(() => {
-    protectPage('user');
     const productData = getProductById(id);
     if (!productData) {
       showToast('Product not found', 'error');
@@ -30,14 +29,14 @@ const ProductDetail = () => {
     }
     setProduct(productData);
 
-    const productReviews = getReviews().filter(r => r.productId === id);
+    const productReviews = getReviews ? getReviews().filter(r => String(r.productId) === String(id)) : [];
     setReviews(productReviews);
 
     const related = products
-      .filter(p => p.active && p.id !== id && p.category === productData.category)
+      .filter(p => p.active && String(p.id) !== String(id) && p.category === productData.category)
       .slice(0, 4);
     setRelatedProducts(related);
-  }, [id, getProductById, products, getReviews, navigate, protectPage, showToast]);
+  }, [id, getProductById, products, getReviews, navigate, showToast]);
 
   const handleQuantityChange = useCallback((delta) => {
     if (product) {

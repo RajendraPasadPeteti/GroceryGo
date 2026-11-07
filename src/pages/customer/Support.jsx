@@ -1,354 +1,302 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
-const ticketCategories = [
-  'Order Issues',
-  'Item Quality',
-  'Delivery & Partner',
-  'Payment & UPI',
-  'Other',
+const supportCategories = [
+  { id: 'Order Issues', label: 'Order Issues', icon: '📦' },
+  { id: 'Item Quality', label: 'Item Quality', icon: '🍎' },
+  { id: 'Delivery & Partner', label: 'Delivery & Partner', icon: '🛵' },
+  { id: 'Payment & UPI', label: 'Payment & UPI', icon: '💳' },
+  { id: 'Other Inquiries', label: 'Other Inquiries', icon: '💬' },
 ];
 
-const ticketPriorities = ['Low', 'Medium', 'High', 'Urgent'];
-
 const Support = () => {
-  const { getOrdersByUserId, createSupportTicket, getSupportTicketsByUserId } = useStore();
-  const { user, protectPage } = useAuth();
+  const { supportTickets, createSupportTicket, orders } = useStore();
+  const { user } = useAuth();
   const { showToast } = useUI();
-  const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState('raise');
+
+  const [selectedDept, setSelectedDept] = useState('Order Issues');
   const [formData, setFormData] = useState({
-    category: 'Order Issues',
-    priority: 'Medium',
-    orderId: '',
+    fullName: user?.name || 'sohith',
+    email: user?.email || 'sohithnagendra80@gmail.com',
+    relatedOrder: '',
+    urgencyPriority: 'Medium (Standard Query)',
     subject: '',
     description: '',
   });
-  const [tickets, setTickets] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [orders, setOrders] = useState([]);
-
-  useEffect(() => {
-    protectPage('user');
-    loadData();
-  }, [protectPage]);
-
-  useEffect(() => {
-    const orderId = searchParams.get('orderId');
-    if (orderId) {
-      setFormData(prev => ({ ...prev, orderId, category: 'Order Issues' }));
-      setActiveTab('raise');
-    }
-  }, [searchParams]);
-
-  const loadData = () => {
-    if (user) {
-      setOrders(getOrdersByUserId(user.id));
-      setTickets(getSupportTicketsByUserId(user.id));
-    }
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.subject.trim() || !formData.description.trim()) {
-      showToast('Please fill in all required fields', 'error');
+      showToast('Please provide a subject and detailed description', 'error');
       return;
     }
-    setSubmitting(true);
-    try {
-      createSupportTicket({
-        userId: user.id,
-        userName: user.name,
-        userEmail: user.email,
-        userPhone: user.phone,
-        orderId: formData.orderId || null,
-        category: formData.category,
-        priority: formData.priority,
-        subject: formData.subject,
-        description: formData.description,
-      });
-      showToast('Support ticket created successfully!', 'success');
-      setFormData({
-        category: 'Order Issues',
-        priority: 'Medium',
-        orderId: '',
-        subject: '',
-        description: '',
-      });
-      setActiveTab('my-tickets');
-      loadData();
-    } catch {
-      showToast('Failed to create ticket', 'error');
+
+    const newTicket = {
+      id: '#SUP' + String(Date.now()).slice(-5),
+      customerName: formData.fullName,
+      customerEmail: formData.email,
+      orderRef: formData.relatedOrder || (orders[0] ? orders[0].id : '#GG202611059708'),
+      category: selectedDept,
+      priority: formData.urgencyPriority.split(' ')[0],
+      subject: formData.subject,
+      description: formData.description,
+      status: 'Open',
+      createdAt: new Date().toISOString(),
+      adminResponse: null,
+    };
+
+    if (createSupportTicket) {
+      createSupportTicket(newTicket);
     }
-    setSubmitting(false);
+
+    showToast('Support ticket raised successfully!', 'success');
+    setFormData(prev => ({ ...prev, subject: '', description: '' }));
   };
 
   return (
-    <CustomerLayout>
-      <div className="support-page">
-        <header className="page-header" role="heading" aria-level="1">
-          <div className="page-header__left">
-            <nav className="breadcrumb" aria-label="Breadcrumb">
-              <ol className="breadcrumb__list">
-                <li className="breadcrumb__item"><span className="breadcrumb__current" aria-current="page">Help & Support</span></li>
-              </ol>
-            </nav>
-            <div>
-              <h1 className="page-header__title">Help & Support</h1>
-              <p className="page-header__subtitle">Get help with your orders, deliveries, and account</p>
+    <div style={{ background: '#F8FAF9', minHeight: '80vh', padding: '36px 0 64px' }}>
+      <div className="container">
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '28px', alignItems: 'flex-start' }}>
+          {/* Left Column: Raise Ticket Form matching Screenshot (338).png */}
+          <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '28px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#1F2937', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
+              <span>📝</span>
+              <span>Raise a Support Ticket</span>
+            </h2>
+
+            <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '14px' }}>
+              Select the department or issue category:
             </div>
-          </div>
-        </header>
 
-        <div className="support-tabs">
-          <div className="support-tabs__nav" role="tablist">
-            <button
-              role="tab"
-              aria-selected={activeTab === 'raise'}
-              className={`support-tabs__tab ${activeTab === 'raise' ? 'active' : ''}`}
-              onClick={() => setActiveTab('raise')}
-            >
-              📝 Raise Ticket
-            </button>
-            <button
-              role="tab"
-              aria-selected={activeTab === 'my-tickets'}
-              className={`support-tabs__tab ${activeTab === 'my-tickets' ? 'active' : ''}`}
-              onClick={() => setActiveTab('my-tickets')}
-            >
-              📋 My Tickets ({tickets.length})
-            </button>
-            <button
-              role="tab"
-              aria-selected={activeTab === 'help'}
-              className={`support-tabs__tab ${activeTab === 'help' ? 'active' : ''}`}
-              onClick={() => setActiveTab('help')}
-            >
-              ❓ Quick Help
-            </button>
-          </div>
-
-          <div className="support-tabs__content" role="tabpanel">
-            {activeTab === 'raise' && (
-              <div className="card support-form">
-                <h3 className="support-form__title">Raise a Support Ticket</h3>
-                <form onSubmit={handleSubmit} noValidate>
-                  <div className="input-group">
-                    <label className="input-label">Issue Category</label>
-                    <div className="category-pills" role="radiogroup" aria-label="Select issue category">
-                      {ticketCategories.map(cat => (
-                        <label key={cat} className={`category-pill ${formData.category === cat ? 'active' : ''}`}>
-                          <input
-                            type="radio"
-                            name="category"
-                            value={cat}
-                            checked={formData.category === cat}
-                            onChange={handleChange}
-                          />
-                          {cat}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid-2">
-                    <div className="input-group">
-                      <label htmlFor="priority" className="input-label">Priority</label>
-                      <select
-                        id="priority"
-                        name="priority"
-                        className="input select"
-                        value={formData.priority}
-                        onChange={handleChange}
-                      >
-                        {ticketPriorities.map(p => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="input-group">
-                      <label htmlFor="orderId" className="input-label">Related Order (Optional)</label>
-                      <select
-                        id="orderId"
-                        name="orderId"
-                        className="input select"
-                        value={formData.orderId}
-                        onChange={handleChange}
-                      >
-                        <option value="">Select an order</option>
-                        {orders.map(order => (
-                          <option key={order.id} value={order.id}>
-                            {order.id} - ₹{order.total} ({order.status})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="input-group">
-                    <label htmlFor="subject" className="input-label">Subject *</label>
-                    <input
-                      id="subject"
-                      name="subject"
-                      type="text"
-                      className="input"
-                      placeholder="Brief summary of the issue"
-                      value={formData.subject}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="input-group">
-                    <label htmlFor="description" className="input-label">Description *</label>
-                    <textarea
-                      id="description"
-                      name="description"
-                      className="input textarea"
-                      placeholder="Describe your issue in detail..."
-                      value={formData.description}
-                      onChange={handleChange}
-                      rows={5}
-                      required
-                    />
-                  </div>
-
-                  <div className="alert alert--info" style={{ marginTop: '16px' }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <line x1="12" y1="16" x2="12" y2="12"></line>
-                      <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
-                    <div>
-                      <strong>Auto-filled:</strong> Your name, email, and phone will be automatically included.
-                    </div>
-                  </div>
-
-                  <button type="submit" className="btn btn--primary btn--full" disabled={submitting}>
-                    {submitting ? 'Submitting...' : 'Submit Ticket'}
+            {/* Department Category Buttons */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '24px' }}>
+              {supportCategories.map(cat => {
+                const isActive = selectedDept === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedDept(cat.id)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      border: isActive ? '1px solid #16A34A' : '1px solid #E5E7EB',
+                      background: isActive ? '#F0FDF4' : '#FFFFFF',
+                      color: isActive ? '#15803D' : '#374151',
+                      fontWeight: isActive ? 700 : 500,
+                      fontSize: '13.5px',
+                      cursor: 'pointer',
+                      transition: 'all 120ms ease',
+                    }}
+                  >
+                    <span>{cat.icon}</span>
+                    <span>{cat.label}</span>
                   </button>
-                </form>
-              </div>
-            )}
+                );
+              })}
+            </div>
 
-            {activeTab === 'my-tickets' && (
-              <div className="support-tickets">
-                {tickets.length === 0 ? (
-                  <div className="empty-state card">
-                    <div className="empty-state__icon">📋</div>
-                    <h3 className="empty-state__title">No tickets yet</h3>
-                    <p className="empty-state__desc">Your support tickets will appear here</p>
-                  </div>
-                ) : (
-                  <div className="tickets-list">
-                    {tickets.map(ticket => (
-                      <article key={ticket.id} className="card ticket-card">
-                        <div className="ticket-card__header">
-                          <div className="ticket-card__meta">
-                            <span className="ticket-card__id">{ticket.id}</span>
-                            <span className={`badge badge--${getTicketStatusBadge(ticket.status)}`}>{ticket.status}</span>
-                          </div>
-                          <span className="ticket-card__date">{new Date(ticket.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-                        </div>
-                        <div className="ticket-card__details">
-                          <h4>{ticket.subject}</h4>
-                          <div className="ticket-card__badges">
-                            <span className="badge badge--info">{ticket.category}</span>
-                            <span className="badge badge--warning">{ticket.priority}</span>
-                          </div>
-                          <p className="ticket-card__description">{ticket.description}</p>
-                          {ticket.orderId && (
-                            <p className="ticket-card__order">Related Order: <strong>{ticket.orderId}</strong></p>
-                          )}
-                        </div>
-                        {ticket.adminResponse && (
-                          <div className="ticket-card__response">
-                            <div className="ticket-card__response-label">Admin Response</div>
-                            <p>{ticket.adminResponse}</p>
-                            <small>Responded on {new Date(ticket.resolvedAt).toLocaleDateString()}</small>
-                          </div>
-                        )}
-                      </article>
+            <form onSubmit={handleSubmit}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Full Name *</label>
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={formData.fullName}
+                    onChange={handleChange}
+                    className="input"
+                    required
+                  />
+                </div>
+
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Email Address *</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    className="input"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Related Order (Optional)</label>
+                  <select
+                    name="relatedOrder"
+                    value={formData.relatedOrder}
+                    onChange={handleChange}
+                    className="input select"
+                  >
+                    <option value="">-- No specific order --</option>
+                    {orders && orders.map(o => (
+                      <option key={o.id} value={o.id}>Order {o.id} (₹{o.total})</option>
                     ))}
-                  </div>
+                  </select>
+                </div>
+
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Urgency Priority *</label>
+                  <select
+                    name="urgencyPriority"
+                    value={formData.urgencyPriority}
+                    onChange={handleChange}
+                    className="input select"
+                  >
+                    <option value="Low (General Inquiry)">Low (General Inquiry)</option>
+                    <option value="Medium (Standard Query)">Medium (Standard Query)</option>
+                    <option value="High (Urgent Escalation)">High (Urgent Escalation)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Issue Subject *</label>
+                <input
+                  type="text"
+                  name="subject"
+                  value={formData.subject}
+                  onChange={handleChange}
+                  placeholder="Brief summary of your query or issue"
+                  className="input"
+                  required
+                />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Detailed Description *</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  placeholder="Please describe what happened, including any item names, timings, or payment references..."
+                  className="input textarea"
+                  style={{ minHeight: '110px' }}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn--primary btn--full"
+                style={{ height: '46px', fontSize: '15px', fontWeight: 700, marginTop: '8px' }}
+              >
+                🚀 Submit Support Ticket
+              </button>
+            </form>
+          </div>
+
+          {/* Right Column: Tickets & Quick Assistance */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Card 1: My Support Tickets */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                <span>📋</span>
+                <span>My Support Tickets ( {supportTickets?.length || 0} )</span>
+              </h2>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {supportTickets && supportTickets.length > 0 ? (
+                  supportTickets.slice(0, 3).map(ticket => (
+                    <div
+                      key={ticket.id}
+                      style={{
+                        background: '#F9FAFB',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '12px',
+                        padding: '14px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '14px', color: '#16A34A' }}>{ticket.id}</span>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '9999px',
+                            background: ticket.status === 'Resolved' ? '#DCFCE7' : '#FEF3C7',
+                            color: ticket.status === 'Resolved' ? '#15803D' : '#B45309',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {ticket.status || 'OPEN'}
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: '14px', color: '#1F2937' }}>
+                        {ticket.subject || 'General Inquiry'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#6B7280', margin: '4px 0' }}>
+                        Category: <strong>{ticket.category || 'General'}</strong> • Priority: <strong>{ticket.priority || 'Medium'}</strong>
+                      </div>
+                      <p style={{ fontSize: '12.5px', color: '#4B5563', margin: 0, fontStyle: 'italic' }}>
+                        "{ticket.description}"
+                      </p>
+                      {ticket.adminResponse && (
+                        <div style={{ marginTop: '8px', padding: '8px 10px', background: '#F0FDF4', borderRadius: '8px', fontSize: '12px', color: '#15803D' }}>
+                          💬 <strong>Support:</strong> {ticket.adminResponse}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ fontSize: '13px', color: '#9CA3AF', margin: 0 }}>No active support tickets found.</p>
                 )}
               </div>
-            )}
+            </div>
 
-            {activeTab === 'help' && (
-              <div className="help-section">
-                <div className="help-cards">
-                  <div className="help-card card">
-                    <div className="help-card__icon">📞</div>
-                    <h3>Call Us</h3>
-                    <p>Available 8 AM - 10 PM daily</p>
-                    <a href="tel:+919876543210" className="btn btn--primary btn--full">+91 98765 43210</a>
-                  </div>
-                  <div className="help-card card">
-                    <div className="help-card__icon">📧</div>
-                    <h3>Email Us</h3>
-                    <p>Response within 24 hours</p>
-                    <a href="mailto:support@grocerygo.com" className="btn btn--secondary btn--full">support@grocerygo.com</a>
-                  </div>
-                  <div className="help-card card">
-                    <div className="help-card__icon">🏪</div>
-                    <h3>Visit Hub</h3>
-                    <p>GroceryGo Fulfillment Center</p>
-                    <address style={{ fontStyle: 'normal', color: 'var(--text-muted)' }}>
-                      MG Road, Vijayawada<br/>Andhra Pradesh - 520001
-                    </address>
+            {/* Card 2: Quick Assistance */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
+                <span>📞</span>
+                <span>Quick Assistance</span>
+              </h2>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#F9FAFB', padding: '12px 14px', borderRadius: '10px' }}>
+                  <span style={{ fontSize: '24px' }}>📱</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '14px', color: '#1F2937' }}>Customer Helpline</div>
+                    <div style={{ fontSize: '12.5px', color: '#6B7280' }}>+91 98765 43210 (7 AM - 11 PM Daily)</div>
                   </div>
                 </div>
 
-                <div className="help-faq card" style={{ marginTop: '24px' }}>
-                  <h3 className="help-faq__title">Frequently Asked Questions</h3>
-                  <div className="faq-list">
-                    {[
-                      { q: 'How long does delivery take?', a: 'We deliver in 15-30 minutes within our service area.' },
-                      { q: 'What payment methods are accepted?', a: 'Cash on Delivery (COD) and UPI payments.' },
-                      { q: 'Can I cancel my order?', a: 'Yes, you can cancel before the order is dispatched.' },
-                      { q: 'What if items are damaged?', a: 'Report via support ticket within 2 hours of delivery for replacement.' },
-                      { q: 'Is there a minimum order?', a: 'No minimum order. Free delivery on orders above ₹300.' },
-                    ].map((faq, i) => (
-                      <details key={i} className="faq-item">
-                        <summary>{faq.q}</summary>
-                        <p>{faq.a}</p>
-                      </details>
-                    ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#F9FAFB', padding: '12px 14px', borderRadius: '10px' }}>
+                  <span style={{ fontSize: '24px' }}>✉️</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '14px', color: '#1F2937' }}>Priority Support Email</div>
+                    <div style={{ fontSize: '12.5px', color: '#6B7280' }}>support@grocerygo.com</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#F9FAFB', padding: '12px 14px', borderRadius: '10px' }}>
+                  <span style={{ fontSize: '24px' }}>📍</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '14px', color: '#1F2937' }}>Dispatch Fulfillment Hub</div>
+                    <div style={{ fontSize: '12.5px', color: '#6B7280' }}>Bandar Road, Vijayawada, AP - 520001</div>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
-    </CustomerLayout>
+    </div>
   );
 };
-
-const getTicketStatusBadge = (status) => {
-  switch (status) {
-    case 'Resolved': return 'success';
-    case 'In Progress': return 'primary';
-    default: return 'warning';
-  }
-};
-
-const CustomerLayout = ({ children }) => (
-  <div className="customer-layout">
-    <main className="customer-layout__content" role="main">
-      <div className="container">{children}</div>
-    </main>
-  </div>
-);
 
 export default Support;

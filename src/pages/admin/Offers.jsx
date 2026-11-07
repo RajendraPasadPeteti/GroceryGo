@@ -1,217 +1,302 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
+import AdminLayout from '../../components/layout/AdminLayout';
 import { useStore } from '../../context/StoreContext';
-import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
 const AdminOffers = () => {
-  const { coupons, addCoupon, updateCoupon, deleteCoupon, refreshCoupons: _refreshCoupons } = useStore();
-  const { isAuthenticated: _isAuthenticated, isAdmin: _isAdmin, protectPage } = useAuth();
-  const { showToast, openModal, closeModal } = useUI();
+  const { coupons, addCoupon, updateCoupon, deleteCoupon } = useStore();
+  const { showToast } = useUI();
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState(null);
-  const [formData, setFormData] = useState({ code: '', description: '', discountType: 'percentage', discountValue: 0, minOrderValue: 0, maxDiscount: 0, usageLimit: 1, validFrom: '', validUntil: '', active: true });
 
-  useEffect(() => { protectPage('admin'); }, [protectPage]);
-  useEffect(() => {
-    if (editingCoupon) setFormData({ ...editingCoupon, validFrom: editingCoupon.validFrom?.split('T')[0], validUntil: editingCoupon.validUntil?.split('T')[0] });
-    else setFormData({ code: '', description: '', discountType: 'percentage', discountValue: 0, minOrderValue: 0, maxDiscount: 0, usageLimit: 1, validFrom: '', validUntil: '', active: true });
-  }, [editingCoupon]);
+  const [form, setForm] = useState({
+    code: '',
+    description: '',
+    discount: 100,
+    minOrder: 500,
+    active: true,
+  });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!formData.code || !formData.discountValue) { showToast('Code and discount value required', 'error'); return; }
-    const data = { ...formData, validFrom: formData.validFrom ? new Date(formData.validFrom).toISOString() : null, validUntil: formData.validUntil ? new Date(formData.validUntil).toISOString() : null };
-    if (editingCoupon) { updateCoupon(editingCoupon.id, data); showToast('Coupon updated!', 'success'); }
-    else { addCoupon(data); showToast('Coupon added!', 'success'); }
-    closeModal('couponForm'); setEditingCoupon(null);
+  const filteredCoupons = useMemo(() => {
+    let result = coupons || [];
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      result = result.filter(c =>
+        c.code?.toLowerCase().includes(q) ||
+        c.description?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [coupons, searchTerm]);
+
+  const handleToggleStatus = (coupon) => {
+    if (updateCoupon) {
+      updateCoupon(coupon.id, { ...coupon, active: !coupon.active });
+    }
+    showToast(`Coupon ${coupon.code} ${coupon.active ? 'disabled' : 'activated'}`, 'info');
   };
-  const handleDelete = (id) => { if (window.confirm('Delete this coupon?')) { deleteCoupon(id); showToast('Coupon deleted', 'success'); } };
-  const toggleActive = (coupon) => { updateCoupon(coupon.id, { active: !coupon.active }); showToast(`${coupon.code} ${coupon.active ? 'deactivated' : 'activated'}`, 'success'); };
+
+  const handleDelete = (id, code) => {
+    if (window.confirm(`Delete promotion code ${code}?`)) {
+      if (deleteCoupon) deleteCoupon(id);
+      showToast(`Coupon ${code} removed`, 'info');
+    }
+  };
+
+  const handleSaveCoupon = (e) => {
+    e.preventDefault();
+    if (!form.code.trim()) {
+      showToast('Coupon code is required', 'error');
+      return;
+    }
+
+    if (editingCoupon) {
+      updateCoupon(editingCoupon.id, {
+        ...editingCoupon,
+        code: form.code.toUpperCase().trim(),
+        description: form.description,
+        discount: Number(form.discount),
+        minOrder: Number(form.minOrder),
+        active: form.active,
+      });
+      showToast('Coupon updated successfully', 'success');
+    } else {
+      addCoupon({
+        id: 'coup-' + Date.now(),
+        code: form.code.toUpperCase().trim(),
+        description: form.description || `₹${form.discount} OFF on orders above ₹${form.minOrder}`,
+        discount: Number(form.discount),
+        minOrder: Number(form.minOrder),
+        active: true,
+      });
+      showToast('New coupon created!', 'success');
+    }
+
+    setShowModal(false);
+    setEditingCoupon(null);
+    setForm({ code: '', description: '', discount: 100, minOrder: 500, active: true });
+  };
 
   return (
     <AdminLayout>
-      <div className="admin-offers">
-        <PageHeader
-          title="Offers & Coupons"
-          subtitle="Manage discount coupons and promotions"
-          breadcrumb={[{ label: 'Dashboard', href: '/admin/dashboard' }, { label: 'Offers' }]}
-          actions={<button className="btn btn--primary" onClick={() => { setEditingCoupon(null); openModal('couponForm'); }}>+ Add Coupon</button>}
-        />
-        <div className="card">
-          <div className="table-responsive">
-            <table className="table" role="table">
-              <thead>
-                <tr>
-                  <th scope="col">Code</th>
-                  <th scope="col">Description</th>
-                  <th scope="col">Discount</th>
-                  <th scope="col">Min Order</th>
-                  <th scope="col">Max Discount</th>
-                  <th scope="col">Usage</th>
-                  <th scope="col">Validity</th>
-                  <th scope="col">Status</th>
-                  <th scope="col"><span className="visually-hidden">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {coupons.map(c => (
+      {/* Page Header matching Screenshot (3) */}
+      <div className="admin-header-row">
+        <div>
+          <h1 className="admin-header-title">
+            <span>🏷️</span>
+            <span>Promotional Offers & Coupon Codes</span>
+          </h1>
+          <p className="admin-header-subtitle">
+            Create customer discount codes, set minimum cart spend requirements, and boost conversion.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setEditingCoupon(null);
+            setForm({ code: '', description: '', discount: 100, minOrder: 500, active: true });
+            setShowModal(true);
+          }}
+          className="admin-btn-primary"
+          style={{ height: '42px', padding: '0 20px', fontSize: '14px' }}
+        >
+          + Create New Coupon
+        </button>
+      </div>
+
+      {/* Main Table Card matching Screenshot (3) */}
+      <div className="admin-card">
+        <div className="admin-card-head">
+          <h2 className="admin-card-title">Active Promotion Campaigns</h2>
+          <div className="admin-card-actions">
+            <input
+              type="search"
+              placeholder="Search coupon code or description..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="admin-search-input"
+              style={{ minWidth: '280px' }}
+            />
+          </div>
+        </div>
+
+        <div className="table-responsive">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Offer Campaign</th>
+                <th>Discount Value</th>
+                <th>Minimum Cart Spend</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCoupons && filteredCoupons.length > 0 ? (
+                filteredCoupons.map(c => (
                   <tr key={c.id}>
-                    <td><strong>{c.code}</strong></td>
-                    <td>{c.description}</td>
-                    <td>{c.discountType === 'percentage' ? c.discountValue + '%' : '₹' + c.discountValue}</td>
-                    <td>₹{c.minOrderValue}</td>
-                    <td>{c.maxDiscount ? c.discountType === 'percentage' ? c.maxDiscount + '%' : '₹' + c.maxDiscount : 'No limit'}</td>
-                    <td>{c.usedCount}/{c.usageLimit}</td>
-                    <td>{c.validFrom ? new Date(c.validFrom).toLocaleDateString() : '—'} to {c.validUntil ? new Date(c.validUntil).toLocaleDateString() : '—'}</td>
                     <td>
-                      <span className={`badge badge--${c.active ? 'success' : 'danger'}`}>{c.active ? 'Active' : 'Inactive'}</span>
-                      <button className="btn btn--ghost btn--sm btn--icon" onClick={() => toggleActive(c)} style={{ marginLeft: '8px' }} title="Toggle" aria-label={`Toggle ${c.code}`}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
-                      </button>
+                      <span
+                        style={{
+                          background: '#DCFCE7',
+                          color: '#15803D',
+                          fontFamily: 'monospace',
+                          fontWeight: 800,
+                          fontSize: '13.5px',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #BBF7D0',
+                        }}
+                      >
+                        {c.code}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600, color: '#1F2937' }}>
+                      {c.description || `₹${c.discount} OFF on orders above ₹${c.minOrder}`}
+                    </td>
+                    <td style={{ fontWeight: 700, color: '#1F2937' }}>
+                      ₹{c.discount || c.value} OFF
+                    </td>
+                    <td style={{ fontWeight: 600, color: '#4B5563' }}>
+                      ₹{c.minOrder || c.minimumCartSpend || 0}
                     </td>
                     <td>
-                      <div className="action-buttons">
-                        <button className="btn btn--ghost btn--sm btn--icon" onClick={() => { setEditingCoupon(c); openModal('couponForm'); }} aria-label={`Edit ${c.code}`}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      <span
+                        className="admin-status-pill"
+                        style={{
+                          background: c.active !== false ? '#DCFCE7' : '#F1F5F9',
+                          color: c.active !== false ? '#15803D' : '#64748B',
+                        }}
+                      >
+                        {c.active !== false ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCoupon(c);
+                            setForm({
+                              code: c.code,
+                              description: c.description,
+                              discount: c.discount || c.value || 50,
+                              minOrder: c.minOrder || c.minimumCartSpend || 250,
+                              active: c.active !== false,
+                            });
+                            setShowModal(true);
+                          }}
+                          className="admin-btn-action"
+                        >
+                          Edit
                         </button>
-                        <button className="btn btn--ghost btn--sm btn--icon btn--danger" onClick={() => handleDelete(c.id)} aria-label={`Delete ${c.code}`}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(c)}
+                          className="admin-btn-action admin-btn-action--red"
+                        >
+                          {c.active !== false ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(c.id, c.code)}
+                          className="admin-btn-action admin-btn-action--red"
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {coupons.length === 0 && (
-            <div className="empty-state" style={{ padding: '60px' }}>
-              <div className="empty-state__icon">🎟️</div>
-              <h3 className="empty-state__title">No coupons found</h3>
-            </div>
-          )}
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#9CA3AF' }}>
+                    No promotion campaigns found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-        {editingCoupon !== null && (
-          <CouponFormModal
-            formData={formData}
-            onFormChange={setFormData}
-            onSubmit={handleSubmit}
-            onClose={() => { closeModal('couponForm'); setEditingCoupon(null); }}
-            editing
-          />
-        )}
       </div>
+
+      {/* Create / Edit Coupon Modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px', padding: '28px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', marginBottom: '16px' }}>
+              {editingCoupon ? 'Edit Coupon Campaign' : 'Create New Discount Coupon'}
+            </h3>
+
+            <form onSubmit={handleSaveCoupon}>
+              <div className="input-group">
+                <label className="input-label">Coupon Code *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. GROCERY100"
+                  value={form.code}
+                  onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                  className="input"
+                  style={{ textTransform: 'uppercase', fontFamily: 'monospace', fontWeight: 700 }}
+                />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Campaign Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ₹100 OFF on orders above ₹500"
+                  value={form.description}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
+                  className="input"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="input-group">
+                  <label className="input-label">Discount Value (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={form.discount}
+                    onChange={e => setForm({ ...form, discount: e.target.value })}
+                    className="input"
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label">Min Cart Spend (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={form.minOrder}
+                    onChange={e => setForm({ ...form, minOrder: e.target.value })}
+                    className="input"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button type="submit" className="admin-btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                  {editingCoupon ? 'Save Coupon' : 'Create Coupon'}
+                </button>
+                <button type="button" onClick={() => setShowModal(false)} className="btn btn--secondary" style={{ flex: 1, justifyContent: 'center' }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 };
-
-const CouponFormModal = ({ formData, onFormChange, onSubmit, onClose, editing }) => (
-  <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="coupon-form-title">
-    <div className="modal modal--large" onClick={e => e.stopPropagation()}>
-      <div className="modal__header">
-        <h2 id="coupon-form-title" className="modal__title">{editing ? 'Edit' : 'Add'} Coupon</h2>
-        <button className="modal__close" onClick={onClose} aria-label="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-      <form onSubmit={onSubmit}>
-        <div className="modal__body">
-          <div className="grid-2">
-            <div className="input-group">
-              <label htmlFor="c-code" className="input-label">Coupon Code *</label>
-              <input id="c-code" name="code" type="text" className="input" value={formData.code} onChange={e => onFormChange({ ...formData, code: e.target.value.toUpperCase() })} required />
-            </div>
-            <div className="input-group">
-              <label htmlFor="c-desc" className="input-label">Description</label>
-              <input id="c-desc" name="description" type="text" className="input" value={formData.description} onChange={e => onFormChange({ ...formData, description: e.target.value })} />
-            </div>
-          </div>
-          <div className="grid-3">
-            <div className="input-group">
-              <label htmlFor="c-type" className="input-label">Discount Type *</label>
-              <select id="c-type" name="discountType" className="input select" value={formData.discountType} onChange={e => onFormChange({ ...formData, discountType: e.target.value })}>
-                <option value="percentage">Percentage</option>
-                <option value="fixed">Fixed Amount</option>
-              </select>
-            </div>
-            <div className="input-group">
-              <label htmlFor="c-value" className="input-label">Discount Value *</label>
-              <input id="c-value" name="discountValue" type="number" className="input" value={formData.discountValue} onChange={e => onFormChange({ ...formData, discountValue: Number(e.target.value) })} min="1" step={formData.discountType === 'percentage' ? 1 : 0.5} required />
-            </div>
-            <div className="input-group">
-              <label htmlFor="c-max" className="input-label">Max Discount (0 = no limit)</label>
-              <input id="c-max" name="maxDiscount" type="number" className="input" value={formData.maxDiscount} onChange={e => onFormChange({ ...formData, maxDiscount: Number(e.target.value) })} min="0" step={formData.discountType === 'percentage' ? 1 : 0.5} />
-            </div>
-          </div>
-          <div className="grid-3">
-            <div className="input-group">
-              <label htmlFor="c-min" className="input-label">Min Order Value</label>
-              <input id="c-min" name="minOrderValue" type="number" className="input" value={formData.minOrderValue} onChange={e => onFormChange({ ...formData, minOrderValue: Number(e.target.value) })} min="0" step="0.5" />
-            </div>
-            <div className="input-group">
-              <label htmlFor="c-limit" className="input-label">Usage Limit</label>
-              <input id="c-limit" name="usageLimit" type="number" className="input" value={formData.usageLimit} onChange={e => onFormChange({ ...formData, usageLimit: Number(e.target.value) })} min="1" />
-            </div>
-            <div className="input-group">
-              <label htmlFor="c-valid" className="input-label">Valid Until</label>
-              <input id="c-valid" name="validUntil" type="date" className="input" value={formData.validUntil} onChange={e => onFormChange({ ...formData, validUntil: e.target.value })} />
-            </div>
-          </div>
-          <div className="grid-2">
-            <div className="input-group">
-              <label htmlFor="c-from" className="input-label">Valid From</label>
-              <input id="c-from" name="validFrom" type="date" className="input" value={formData.validFrom} onChange={e => onFormChange({ ...formData, validFrom: e.target.value })} />
-            </div>
-            <div className="input-group checkbox-group">
-              <label className="checkbox-label">
-                <input type="checkbox" checked={formData.active} onChange={e => onFormChange({ ...formData, active: e.target.checked })} className="checkbox" />
-                <span className="checkbox-custom"></span> Active
-              </label>
-            </div>
-          </div>
-        </div>
-        <div className="modal__footer">
-          <button type="button" className="btn btn--secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn--primary">{editing ? 'Update' : 'Add'} Coupon</button>
-        </div>
-      </form>
-    </div>
-  </div>
-);
-
-const PageHeader = ({ title, subtitle, breadcrumb, actions }) => (
-  <header className="page-header" role="heading" aria-level="1">
-    <div className="page-header__left">
-      {breadcrumb && (
-        <nav className="breadcrumb" aria-label="Breadcrumb">
-          <ol className="breadcrumb__list">
-            {breadcrumb.map((item, i) => (
-              <li key={item.href || i} className="breadcrumb__item">
-                {i > 0 && (
-                  <svg className="breadcrumb__separator" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                )}
-                {item.href ? <a href={item.href} className="breadcrumb__link">{item.label}</a> : <span className="breadcrumb__current" aria-current="page">{item.label}</span>}
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
-      <div>
-        <h1 className="page-header__title">{title}</h1>
-        {subtitle && <p className="page-header__subtitle">{subtitle}</p>}
-      </div>
-    </div>
-    {actions && <div className="page-header__actions">{actions}</div>}
-  </header>
-);
-
-const AdminLayout = ({ children }) => (
-  <div className="admin-layout">
-    <main className="admin-layout__main">
-      <main className="admin-layout__content" role="main">
-        <div className="container">{children}</div>
-      </main>
-    </main>
-  </div>
-);
 
 export default AdminOffers;

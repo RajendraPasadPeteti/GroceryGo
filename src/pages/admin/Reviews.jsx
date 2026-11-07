@@ -1,188 +1,281 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
+import AdminLayout from '../../components/layout/AdminLayout';
 import { useStore } from '../../context/StoreContext';
-import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
+const initialProductReviews = [
+  {
+    id: 1,
+    date: '2026-10-15',
+    productName: 'Full Cream Milk',
+    orderRef: '#GG20260920002',
+    customer: 'Karthik Verma',
+    rating: 5,
+    qualityIssue: 'NONE (FRESH)',
+    comment: 'Delivered chilled and fresh. Perfect for my morning coffee.',
+  },
+  {
+    id: 2,
+    date: '2026-10-18',
+    productName: 'Fresh Apples',
+    orderRef: '#GG20260920001',
+    customer: 'Sneha Reddy',
+    rating: 5,
+    qualityIssue: 'NONE (FRESH)',
+    comment: 'Apples were remarkably crisp, fresh, and sweet! Outstanding quality.',
+  },
+];
+
+const initialFleetReviews = [
+  {
+    id: 101,
+    date: '2026-10-16',
+    riderName: 'Rahul Kumar',
+    orderRef: '#GG20260920002',
+    customer: 'Karthik Verma',
+    rating: 5,
+    qualityIssue: 'ON-TIME (18 MINS)',
+    comment: 'Polite delivery partner, reached within 18 minutes with sealed insulated bag.',
+  },
+];
+
 const AdminReviews = () => {
-  const { reviews, products: _products, users: _users, orders: _orders, updateReview, deleteReview, refreshReviews: _refreshReviews } = useStore();
-  const { isAuthenticated: _isAuthenticated, isAdmin: _isAdmin, protectPage } = useAuth();
   const { showToast } = useUI();
-  const [filter, setFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('products');
+  const [productReviews, setProductReviews] = useState(initialProductReviews);
+  const [fleetReviews, setFleetReviews] = useState(initialFleetReviews);
 
-  useEffect(() => { protectPage('admin'); }, [protectPage]);
-
-  const filteredReviews = useMemo(() => {
-    let result = [...reviews].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    if (filter !== 'all') result = result.filter(r => r.approved === (filter === 'approved'));
-    if (searchTerm) result = result.filter(r => r.id.toLowerCase().includes(searchTerm.toLowerCase()) || r.productName.toLowerCase().includes(searchTerm.toLowerCase()) || r.userName.toLowerCase().includes(searchTerm.toLowerCase()));
-    return result;
-  }, [reviews, filter, searchTerm]);
-
-  const handleApprove = (reviewId) => {
-    updateReview(reviewId, { approved: true });
-    showToast('Review approved', 'success');
-  };
-
-  const handleReject = (reviewId) => {
-    updateReview(reviewId, { approved: false });
-    showToast('Review rejected', 'success');
-  };
-
-  const handleDelete = (id) => {
-    if (window.confirm('Delete this review permanently?')) {
-      deleteReview(id);
-      showToast('Review deleted', 'success');
+  const handleDeleteProductReview = (id) => {
+    if (window.confirm('Delete this verified review record?')) {
+      setProductReviews(prev => prev.filter(r => r.id !== id));
+      showToast('Review deleted', 'info');
     }
   };
 
-  const stats = useMemo(() => ({
-    total: reviews.length,
-    approved: reviews.filter(r => r.approved).length,
-    pending: reviews.filter(r => !r.approved).length,
-    avgRating: reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : '—',
-  }), [reviews]);
+  const handleDeleteFleetReview = (id) => {
+    if (window.confirm('Delete this fleet review record?')) {
+      setFleetReviews(prev => prev.filter(r => r.id !== id));
+      showToast('Fleet review deleted', 'info');
+    }
+  };
 
   return (
     <AdminLayout>
-      <div className="admin-reviews">
-        <PageHeader
-          title="Reviews & Ratings"
-          subtitle="Moderate customer reviews"
-          breadcrumb={[{ label: 'Dashboard', href: '/admin/dashboard' }, { label: 'Reviews' }]}
-        />
-
-        <div className="grid-4" style={{ gap: '16px', marginBottom: '24px' }}>
-          <KPICard title="Total Reviews" value={stats.total} icon="⭐" />
-          <KPICard title="Approved" value={stats.approved} icon="✅" trend={`${stats.pending} pending`} />
-          <KPICard title="Avg Rating" value={stats.avgRating} icon="📊" trend="Out of 5.0" />
-          <KPICard title="Products Reviewed" value={[...new Set(reviews.map(r => r.productId))].length} icon="📦" />
+      {/* Header matching Screenshot (351).png */}
+      <div className="admin-header-row">
+        <div>
+          <h1 className="admin-header-title">
+            <span>⭐</span>
+            <span>Customer Reviews & Ratings Moderation</span>
+          </h1>
+          <p className="admin-header-subtitle">
+            Monitor product quality ratings, reported freshness issues, and delivery fleet performance.
+          </p>
         </div>
+      </div>
 
-        <div className="card" style={{ marginBottom: '20px' }}>
-          <div className="card__body" style={{ padding: '20px' }}>
-            <div className="grid-3" style={{ gap: '16px', alignItems: 'end' }}>
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label htmlFor="rev-search" className="input-label">Search</label>
-                <input id="rev-search" type="search" className="input" placeholder="Product, customer, review text..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-              </div>
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label htmlFor="rev-filter" className="input-label">Status</label>
-                <select id="rev-filter" className="input select" value={filter} onChange={e => setFilter(e.target.value)}>
-                  <option value="all">All</option>
-                  <option value="approved">Approved</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
-            </div>
+      {/* 4 KPI Summary Cards matching Screenshot (351).png */}
+      <div className="admin-kpi-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        {/* Card 1: Product Quality */}
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-head">
+            <div className="admin-kpi-icon-box" style={{ background: '#FEFCE8', color: '#CA8A04' }}>⭐</div>
+            <span className="admin-kpi-pill" style={{ background: '#FEF3C7', color: '#B45309' }}>PRODUCT QUALITY</span>
           </div>
+          <div className="admin-kpi-num">5.0 ⭐</div>
+          <div className="admin-kpi-desc">Avg Grocery Quality Rating</div>
         </div>
 
-        <div className="card">
+        {/* Card 2: Delivery Speed */}
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-head">
+            <div className="admin-kpi-icon-box" style={{ background: '#DCFCE7', color: '#16A34A' }}>⚡</div>
+            <span className="admin-kpi-pill" style={{ background: '#DCFCE7', color: '#15803D' }}>DELIVERY SPEED</span>
+          </div>
+          <div className="admin-kpi-num">5.0 ⭐</div>
+          <div className="admin-kpi-desc">Avg Delivery Speed Rating</div>
+        </div>
+
+        {/* Card 3: Fleet Conduct */}
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-head">
+            <div className="admin-kpi-icon-box" style={{ background: '#FDF4FF', color: '#C026D3' }}>🛵</div>
+            <span className="admin-kpi-pill" style={{ background: '#F3E8FF', color: '#7E22CE' }}>FLEET CONDUCT</span>
+          </div>
+          <div className="admin-kpi-num">5.0 ⭐</div>
+          <div className="admin-kpi-desc">Avg Partner Conduct Rating</div>
+        </div>
+
+        {/* Card 4: Volume */}
+        <div className="admin-kpi-card">
+          <div className="admin-kpi-head">
+            <div className="admin-kpi-icon-box" style={{ background: '#EEF2FF', color: '#4F46E5' }}>💬</div>
+            <span className="admin-kpi-pill" style={{ background: '#E0F2FE', color: '#0284C7' }}>VOLUME</span>
+          </div>
+          <div className="admin-kpi-num">{productReviews.length + fleetReviews.length}</div>
+          <div className="admin-kpi-desc">Total Verified Customer Reviews</div>
+        </div>
+      </div>
+
+      {/* Main Reviews Moderation Card matching Screenshot (351).png */}
+      <div className="admin-card">
+        {/* Review Tabs */}
+        <div style={{ display: 'flex', gap: '24px', borderBottom: '1px solid #E5E7EB', marginBottom: '20px' }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('products')}
+            style={{
+              padding: '12px 6px',
+              border: 'none',
+              background: 'none',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'products' ? 800 : 600,
+              fontSize: '14.5px',
+              color: activeTab === 'products' ? '#16A34A' : '#6B7280',
+              borderBottom: activeTab === 'products' ? '3px solid #16A34A' : '3px solid transparent',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span>🍎</span>
+            <span>Product Item Reviews ({productReviews.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('fleet')}
+            style={{
+              padding: '12px 6px',
+              border: 'none',
+              background: 'none',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'fleet' ? 800 : 600,
+              fontSize: '14.5px',
+              color: activeTab === 'fleet' ? '#16A34A' : '#6B7280',
+              borderBottom: activeTab === 'fleet' ? '3px solid #16A34A' : '3px solid transparent',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span>🛵</span>
+            <span>Delivery Fleet Reviews ({fleetReviews.length})</span>
+          </button>
+        </div>
+
+        {/* Tab 1: Product Item Reviews */}
+        {activeTab === 'products' ? (
           <div className="table-responsive">
-            <table className="table" role="table">
+            <table className="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">Review</th>
-                  <th scope="col">Product</th>
-                  <th scope="col">Customer</th>
-                  <th scope="col">Rating</th>
-                  <th scope="col">Order</th>
-                  <th scope="col">Date</th>
-                  <th scope="col">Status</th>
-                  <th scope="col"><span className="visually-hidden">Actions</span></th>
+                  <th>Date</th>
+                  <th>Product Name</th>
+                  <th>Order Ref</th>
+                  <th>Customer</th>
+                  <th>Rating</th>
+                  <th>Quality Issues</th>
+                  <th>Comment / Feedback</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredReviews.map(r => (
+                {productReviews.map(r => (
                   <tr key={r.id}>
+                    <td style={{ color: '#6B7280', fontSize: '12.5px' }}>{r.date}</td>
+                    <td style={{ fontWeight: 800, color: '#1F2937' }}>{r.productName}</td>
                     <td>
-                      <div style={{ maxWidth: '300px' }}>
-                        <p style={{ margin: 0, fontWeight: '500' }}>"{r.comment}"</p>
-                        <small style={{ color: 'var(--color-text-secondary)' }}>{r.comment.length > 100 ? r.comment.substring(0, 100) + '...' : r.comment}</small>
-                      </div>
+                      <span style={{ fontWeight: 700, color: '#16A34A', fontFamily: 'monospace' }}>
+                        {r.orderRef}
+                      </span>
                     </td>
-                    <td>{r.productIcon} {r.productName}</td>
-                    <td>{r.userName}<br /><small>{r.userEmail}</small></td>
-                    <td><span style={{ fontSize: '18px' }}>{'⭐'.repeat(r.rating)}</span><br /><small>{r.rating}/5</small></td>
-                    <td><small>{r.orderId}</small></td>
-                    <td>{new Date(r.createdAt).toLocaleDateString()}</td>
-                    <td><span className={`badge badge--${r.approved ? 'success' : 'warning'}`}>{r.approved ? 'Approved' : 'Pending'}</span></td>
+                    <td style={{ fontWeight: 600 }}>{r.customer}</td>
                     <td>
-                      <div className="action-buttons">
-                        <button className="btn btn--ghost btn--sm btn--icon" onClick={() => r.approved ? handleReject(r.id) : handleApprove(r.id)} title={r.approved ? 'Reject' : 'Approve'} aria-label={r.approved ? `Reject review for ${r.productName}` : `Approve review for ${r.productName}`}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">{r.approved ? <path d="M18 6L6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12"></polyline>}</svg>
-                        </button>
-                        <button className="btn btn--ghost btn--sm btn--icon btn--danger" onClick={() => handleDelete(r.id)} aria-label={`Delete review for ${r.productName}`}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                        </button>
-                      </div>
+                      <span style={{ fontWeight: 800, color: '#D97706', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        {r.rating} ⭐
+                      </span>
+                    </td>
+                    <td>
+                      <span className="admin-status-pill" style={{ background: '#DCFCE7', color: '#15803D' }}>
+                        {r.qualityIssue}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '13px', color: '#4B5563', maxWidth: '320px' }}>
+                      {r.comment}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProductReview(r.id)}
+                        className="admin-btn-action admin-btn-action--red"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {filteredReviews.length === 0 && (
-            <div className="empty-state" style={{ padding: '60px' }}>
-              <div className="empty-state__icon">⭐</div>
-              <h3 className="empty-state__title">No reviews found</h3>
-            </div>
-          )}
-        </div>
+        ) : (
+          /* Tab 2: Delivery Fleet Reviews */
+          <div className="table-responsive">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Rider Name</th>
+                  <th>Order Ref</th>
+                  <th>Customer</th>
+                  <th>Rating</th>
+                  <th>Delivery Speed</th>
+                  <th>Comment / Feedback</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fleetReviews.map(r => (
+                  <tr key={r.id}>
+                    <td style={{ color: '#6B7280', fontSize: '12.5px' }}>{r.date}</td>
+                    <td style={{ fontWeight: 800, color: '#1F2937' }}>{r.riderName}</td>
+                    <td>
+                      <span style={{ fontWeight: 700, color: '#16A34A', fontFamily: 'monospace' }}>
+                        {r.orderRef}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{r.customer}</td>
+                    <td>
+                      <span style={{ fontWeight: 800, color: '#D97706', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        {r.rating} ⭐
+                      </span>
+                    </td>
+                    <td>
+                      <span className="admin-status-pill" style={{ background: '#E0F2FE', color: '#0284C7' }}>
+                        {r.qualityIssue}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '13px', color: '#4B5563', maxWidth: '320px' }}>
+                      {r.comment}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFleetReview(r.id)}
+                        className="admin-btn-action admin-btn-action--red"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );
 };
-
-const KPICard = ({ title, value, icon, trend }) => (
-  <div className="card kpi-card">
-    <div className="card__body">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div className="avatar avatar--lg" style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>{icon}</div>
-        <div>
-          <h3 className="kpi-value">{value}</h3>
-          <p className="kpi-label">{title}</p>
-        </div>
-      </div>
-      {trend && <p className="kpi-trend" style={{ marginTop: '8px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{trend}</p>}
-    </div>
-  </div>
-);
-
-const PageHeader = ({ title, subtitle, breadcrumb }) => (
-  <header className="page-header" role="heading" aria-level="1">
-    <div className="page-header__left">
-      {breadcrumb && (
-        <nav className="breadcrumb" aria-label="Breadcrumb">
-          <ol className="breadcrumb__list">
-            {breadcrumb.map((item, i) => (
-              <li key={item.href || i} className="breadcrumb__item">
-                {i > 0 && (
-                  <svg className="breadcrumb__separator" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                )}
-                {item.href ? <a href={item.href} className="breadcrumb__link">{item.label}</a> : <span className="breadcrumb__current" aria-current="page">{item.label}</span>}
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
-      <div>
-        <h1 className="page-header__title">{title}</h1>
-        {subtitle && <p className="page-header__subtitle">{subtitle}</p>}
-      </div>
-    </div>
-  </header>
-);
-
-const AdminLayout = ({ children }) => (
-  <div className="admin-layout">
-    <main className="admin-layout__main">
-      <main className="admin-layout__content" role="main">
-        <div className="container">{children}</div>
-      </main>
-    </main>
-  </div>
-);
 
 export default AdminReviews;

@@ -1,483 +1,409 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
-const orderStatuses = [
-  'Order Placed',
-  'Confirmed',
-  'Preparing',
-  'Rider Assigned',
-  'Out for Delivery',
-  'Delivered',
-  'Cancelled',
+const progressionStages = [
+  { step: 1, label: 'Order Placed' },
+  { step: 2, label: 'Confirmed' },
+  { step: 3, label: 'Preparing' },
+  { step: 4, label: 'Rider Assigned' },
+  { step: 5, label: 'Out for Delivery' },
+  { step: 6, label: 'Delivered' },
 ];
 
-const getStatusIndex = (status) => orderStatuses.indexOf(status);
-
-const getStatusBadge = (status) => {
-  switch (status) {
-    case 'Delivered': return 'success';
-    case 'Cancelled': return 'danger';
-    case 'Out for Delivery':
-    case 'Rider Assigned': return 'primary';
-    case 'Preparing':
-    case 'Confirmed': return 'info';
-    default: return 'info';
+const getStepNumber = (status) => {
+  switch (status?.toLowerCase()) {
+    case 'order placed': return 1;
+    case 'confirmed': return 2;
+    case 'preparing': return 3;
+    case 'rider assigned': return 4;
+    case 'out for delivery': return 5;
+    case 'delivered': return 6;
+    default: return 1;
   }
 };
 
-const itemIssueOptions = [
-  'Damaged packaging',
-  'Not fresh / Spoiled',
-  'Expired / Past date',
-  'Wrong item delivered',
-  'Missing quantity',
-];
-
-const packageConditionOptions = ['Pristine', 'Good', 'Torn / Crushed', 'Spilled / Leaked'];
-
 const Orders = () => {
-  const { getOrdersByUserId, cancelOrder, addReview } = useStore();
-  const { user, protectPage } = useAuth();
-  const { showToast, openModal } = useUI();
-  const [orders, setOrders] = useState([]);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [reviewType, setReviewType] = useState(null);
-  const [reviewData, setReviewData] = useState({
-    productId: null,
-    rating: 0,
-    issues: [],
-    comment: '',
-    speedRating: 0,
-    riderRating: 0,
-    packageCondition: '',
-    remarks: '',
-  });
+  const { orders, cancelOrder, createSupportTicket } = useStore();
+  const { user } = useAuth();
+  const { showToast } = useUI();
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    protectPage('user');
-    loadOrders();
-  }, [protectPage]);
-
-  useEffect(() => {
-    loadOrders();
-  }, [user]);
-
-  const loadOrders = () => {
-    if (user) {
-      const userOrders = getOrdersByUserId(user.id);
-      setOrders(userOrders);
-    }
-  };
+  const [reportingOrder, setReportingOrder] = useState(null);
+  const [issueCategory, setIssueCategory] = useState('Missing Items from Package');
+  const [urgencyPriority, setUrgencyPriority] = useState('Medium Priority');
+  const [issueDescription, setIssueDescription] = useState('');
 
   const handleCancel = (orderId) => {
-    if (window.confirm('Are you sure you want to cancel this order?')) {
-      if (cancelOrder(orderId)) {
-        showToast('Order cancelled successfully', 'success');
-        loadOrders();
-      }
+    if (window.confirm(`Are you sure you want to cancel order ${orderId}?`)) {
+      if (cancelOrder) cancelOrder(orderId);
+      showToast(`Order ${orderId} cancelled`, 'info');
     }
   };
 
-  const openItemReview = (order) => {
-    setSelectedOrder(order);
-    setReviewType('item');
-    setReviewData({
-      productId: order.items[0]?.productId || null,
-      rating: 0,
-      issues: [],
-      comment: '',
-      speedRating: 0,
-      riderRating: 0,
-      packageCondition: '',
-      remarks: '',
-    });
-    openModal('review');
-  };
-
-  const openDeliveryReview = (order) => {
-    setSelectedOrder(order);
-    setReviewType('delivery');
-    setReviewData({
-      productId: null,
-      rating: 0,
-      issues: [],
-      comment: '',
-      speedRating: 0,
-      riderRating: 0,
-      packageCondition: '',
-      remarks: '',
-    });
-    openModal('review');
-  };
-
-  const openIssueReport = (order) => {
-    window.location.href = `/support?orderId=${order.id}`;
-  };
-
-  const handleReviewSubmit = () => {
-    if (!selectedOrder) return;
-
-    if (reviewType === 'item') {
-      if (!reviewData.rating) {
-        showToast('Please select a rating', 'warning');
-        return;
-      }
-      addReview({
-        type: 'item',
-        orderId: selectedOrder.id,
-        productId: reviewData.productId,
-        productName: selectedOrder.items.find(i => i.productId === reviewData.productId)?.name || '',
-        userId: user.id,
-        userName: user.name,
-        rating: reviewData.rating,
-        issues: reviewData.issues,
-        comment: reviewData.comment,
-      });
-      showToast('Item review submitted!', 'success');
-    } else {
-      if (!reviewData.speedRating || !reviewData.riderRating) {
-        showToast('Please rate both speed and rider', 'warning');
-        return;
-      }
-      addReview({
-        type: 'delivery',
-        orderId: selectedOrder.id,
-        riderName: selectedOrder.riderName,
-        userId: user.id,
-        userName: user.name,
-        speedRating: reviewData.speedRating,
-        riderRating: reviewData.riderRating,
-        packageCondition: reviewData.packageCondition,
-        remarks: reviewData.remarks,
-      });
-      showToast('Delivery review submitted!', 'success');
+  const handleReportSubmit = (e) => {
+    e.preventDefault();
+    if (!issueDescription.trim()) {
+      showToast('Please describe the problem', 'error');
+      return;
     }
-    openModal('review', { open: false });
+
+    if (createSupportTicket) {
+      createSupportTicket({
+        id: '#SUP' + String(Date.now()).slice(-5),
+        orderRef: reportingOrder.id,
+        category: issueCategory,
+        priority: urgencyPriority.split(' ')[0],
+        subject: `Issue with Order ${reportingOrder.id}`,
+        description: issueDescription,
+        customerName: reportingOrder.customerName || user?.name || 'Customer',
+        customerEmail: user?.email || 'customer@grocerygo.com',
+        status: 'Open',
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    showToast('Support ticket raised successfully!', 'success');
+    setReportingOrder(null);
+    setIssueDescription('');
   };
 
   return (
-    <CustomerLayout>
-      <div className="orders-page">
-        <header className="page-header" role="heading" aria-level="1">
-          <div className="page-header__left">
-            <nav className="breadcrumb" aria-label="Breadcrumb">
-              <ol className="breadcrumb__list">
-                <li className="breadcrumb__item"><span className="breadcrumb__current" aria-current="page">My Orders</span></li>
-              </ol>
-            </nav>
-            <div>
-              <h1 className="page-header__title">My Orders</h1>
-              <p className="page-header__subtitle">Track and manage your orders</p>
-            </div>
+    <div style={{ background: '#F8FAF9', minHeight: '80vh', padding: '36px 0 64px' }}>
+      <div className="container">
+        {/* Header matching Screenshot (336).png */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#1F2937', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>📦</span>
+              <span>My Orders</span>
+            </h1>
+            <p style={{ fontSize: '14px', color: '#6B7280', marginTop: '4px' }}>
+              Track your grocery deliveries in real time, review past purchases, or request customer support.
+            </p>
           </div>
-        </header>
 
-        {orders.length === 0 ? (
-          <div className="empty-state card" style={{ maxWidth: '600px', margin: '60px auto' }}>
-            <div className="empty-state__icon">📦</div>
-            <h3 className="empty-state__title">No orders yet</h3>
-            <p className="empty-state__desc">Start shopping to see your orders here</p>
-            <a href="/dashboard" className="btn btn--primary btn--lg mt-20">Start Shopping</a>
+          <Link to="/products" className="btn btn--primary" style={{ height: '42px', padding: '0 18px', fontWeight: 700 }}>
+            + Shop More Groceries
+          </Link>
+        </div>
+
+        {/* Orders List */}
+        {orders && orders.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {orders.map(order => {
+              const currentStep = getStepNumber(order.status);
+              const isCancelled = order.status === 'Cancelled';
+
+              return (
+                <div
+                  key={order.id}
+                  style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '16px',
+                    padding: '24px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                  }}
+                >
+                  {/* Order Head */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                    <div>
+                      <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937' }}>
+                        Order {order.id}
+                      </h2>
+                      <div style={{ fontSize: '13px', color: '#6B7280', marginTop: '3px' }}>
+                        Placed on {new Date(order.orderDate).toLocaleString()} • Mode: {order.paymentMethod} ({order.paymentStatus || 'Pending'})
+                      </div>
+                    </div>
+
+                    <span
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: '9999px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        background: isCancelled ? '#FEE2E2' : currentStep === 6 ? '#DCFCE7' : '#E0F2FE',
+                        color: isCancelled ? '#DC2626' : currentStep === 6 ? '#15803D' : '#0284C7',
+                      }}
+                    >
+                      {order.status || 'ORDER PLACED'}
+                    </span>
+                  </div>
+
+                  {/* Live Delivery Progression matching Screenshot (336).png */}
+                  {!isCancelled && (
+                    <div
+                      style={{
+                        background: '#FAFAFA',
+                        border: '1px solid #F3F4F6',
+                        borderRadius: '12px',
+                        padding: '20px 24px',
+                        marginBottom: '24px',
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#6B7280', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '20px' }}>
+                        LIVE DELIVERY PROGRESSION
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                        {/* Connecting track line */}
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '16px',
+                            left: '30px',
+                            right: '30px',
+                            height: '2px',
+                            background: '#E5E7EB',
+                            zIndex: 0,
+                          }}
+                        />
+
+                        {progressionStages.map(stage => {
+                          const isDone = currentStep >= stage.step;
+                          const isCurrent = currentStep === stage.step;
+
+                          return (
+                            <div
+                              key={stage.step}
+                              style={{
+                                flex: 1,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                position: 'relative',
+                                zIndex: 1,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: '34px',
+                                  height: '34px',
+                                  borderRadius: '50%',
+                                  background: isDone ? '#FFFFFF' : '#FFFFFF',
+                                  border: isDone ? '2px solid #16A34A' : '2px solid #E5E7EB',
+                                  color: isDone ? '#16A34A' : '#9CA3AF',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '13px',
+                                  fontWeight: 700,
+                                  boxShadow: isCurrent ? '0 0 0 3px rgba(22, 163, 74, 0.2)' : 'none',
+                                }}
+                              >
+                                {isDone ? '✓' : stage.step}
+                              </div>
+                              <span
+                                style={{
+                                  fontSize: '12px',
+                                  marginTop: '8px',
+                                  fontWeight: isDone ? 700 : 500,
+                                  color: isDone ? '#16A34A' : '#9CA3AF',
+                                  textAlign: 'center',
+                                }}
+                              >
+                                {stage.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Items List */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                    {order.items && order.items.map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>{item.icon || '🍏'}</span>
+                          <span style={{ fontWeight: 600, color: '#1F2937' }}>
+                            {item.name} × {item.quantity} ({item.unit || '1 kg'})
+                          </span>
+                        </div>
+                        <span style={{ fontWeight: 700, color: '#1F2937' }}>
+                          ₹{item.price * item.quantity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Report issue link */}
+                  <div style={{ textAlign: 'right', marginBottom: '20px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setReportingOrder(order)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#B91C1C',
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <span>⚠️ Have an issue with this order? Report to Support</span>
+                    </button>
+                  </div>
+
+                  {/* Bottom Footer Bar */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingTop: '16px',
+                      borderTop: '1px solid #F3F4F6',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                    }}
+                  >
+                    <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                      <strong>Delivering to:</strong> {order.customerName || 'Customer'}, {order.address || 'Address'}, {order.city || 'City'} - {order.pincode || 'Pincode'}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      {order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancel(order.id)}
+                          style={{
+                            border: '1px solid #FECACA',
+                            background: '#FFFFFF',
+                            color: '#DC2626',
+                            borderRadius: '8px',
+                            padding: '6px 14px',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Cancel Order
+                        </button>
+                      )}
+
+                      <div style={{ fontSize: '13px', color: '#6B7280' }}>
+                        Total Paid: <span style={{ fontSize: '18px', fontWeight: 900, color: '#16A34A', marginLeft: '4px' }}>₹{order.total}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
-          <div className="orders-list">
-            {orders.map(order => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                onCancel={handleCancel}
-                onItemReview={openItemReview}
-                onDeliveryReview={openDeliveryReview}
-                onReportIssue={openIssueReport}
-              />
-            ))}
+          <div className="empty-state" style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '64px' }}>
+            <div className="empty-state__icon">📦</div>
+            <h2 className="empty-state__title">No orders found</h2>
+            <p className="empty-state__desc">You haven't placed any orders yet. Start shopping our fresh catalog!</p>
+            <Link to="/products" className="btn btn--primary">
+              Shop Now
+            </Link>
           </div>
         )}
 
-        {reviewType && selectedOrder && (
-          <ReviewModal
-            type={reviewType}
-            order={selectedOrder}
-            data={reviewData}
-            onDataChange={setReviewData}
-            onSubmit={handleReviewSubmit}
-            onClose={() => { setReviewType(null); setSelectedOrder(null); }}
-          />
-        )}
-      </div>
-    </CustomerLayout>
-  );
-};
-
-const OrderCard = ({ order, onCancel, onItemReview, onDeliveryReview, onReportIssue }) => {
-  const statusIndex = getStatusIndex(order.status);
-  const canCancel = statusIndex < 3 && order.status !== 'Cancelled';
-  const isDelivered = order.status === 'Delivered';
-
-  return (
-    <article className="card order-card">
-      <div className="order-card__header">
-        <div className="order-card__meta">
-          <span className="order-card__id">{order.id}</span>
-          <span className="order-card__date">{new Date(order.orderDate).toLocaleDateString('en-IN', {
-            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-          })}</span>
-        </div>
-        <div className="order-card__status">
-          <span className={`badge badge--${getStatusBadge(order.status)}`}>{order.status}</span>
-        </div>
-      </div>
-
-      {order.riderName && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
-        <div className="order-card__rider">
-          <div className="order-card__rider-label">🛵 Rider Assigned</div>
-          <div className="order-card__rider-info">
-            <div className="avatar">{order.riderName?.charAt(0) || 'R'}</div>
-            <div>
-              <strong>{order.riderName}</strong>
-              <span>{order.riderVehicle}</span>
-            </div>
-            <a href={`tel:${order.riderPhone}`} className="btn btn--ghost btn--sm btn--icon" aria-label="Call rider">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-              </svg>
-            </a>
-          </div>
-        </div>
-      )}
-
-      <div className="order-card__stepper" role="navigation" aria-label="Order progress">
-        <div className="stepper">
-          {orderStatuses.map((status, index) => (
+        {/* Report an Order Issue Modal matching Screenshot (337).png */}
+        {reportingOrder && (
+          <div className="modal-overlay" onClick={() => setReportingOrder(null)}>
             <div
-              key={status}
-              className={`stepper__item ${index < statusIndex ? 'stepper__item--completed' : index === statusIndex ? 'stepper__item--active' : ''}`}
+              className="modal"
+              style={{ maxWidth: '520px', padding: '32px' }}
+              onClick={e => e.stopPropagation()}
             >
-              <div className="stepper__circle">
-                {index < statusIndex ? '✓' : index + 1}
-              </div>
-              <span className="stepper__label">{status}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="order-card__items">
-        {order.items.map(item => (
-          <div key={item.id} className="order-item">
-            <span className="order-item__emoji">{item.icon}</span>
-            <div className="order-item__info">
-              <span className="order-item__name">{item.name}</span>
-              <span className="order-item__details">{item.quantity} × {item.unit} • ₹{item.price}</span>
-            </div>
-            <span className="order-item__total">₹{item.price * item.quantity}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="order-card__summary">
-        <div className="order-card__total">
-          <span>Total</span>
-          <strong>₹{order.total}</strong>
-        </div>
-        <div className="order-card__payment">
-          <span>{order.paymentMethod}</span>
-          <span className={`badge badge--${order.paymentStatus === 'Paid' ? 'success' : 'warning'}`}>
-            {order.paymentStatus}
-          </span>
-        </div>
-      </div>
-
-      <div className="order-card__actions">
-        {canCancel && (
-          <button className="btn btn--danger btn--sm" onClick={() => onCancel(order.id)}>
-            Cancel Order
-          </button>
-        )}
-        {isDelivered && (
-          <>
-            <button className="btn btn--secondary btn--sm" onClick={() => onItemReview(order)}>
-              ⭐ Review Items
-            </button>
-            <button className="btn btn--secondary btn--sm" onClick={() => onDeliveryReview(order)}>
-              🚚 Review Delivery
-            </button>
-            <button className="btn btn--ghost btn--sm" onClick={() => onReportIssue(order)}>
-              ⚠️ Report Issue
-            </button>
-          </>
-        )}
-      </div>
-    </article>
-  );
-};
-
-const ReviewModal = ({ type, order, data, onDataChange, onSubmit, onClose }) => {
-  const product = order.items.find(i => i.productId === data.productId) || order.items[0];
-
-  return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
-      <div className="modal modal--review" onClick={e => e.stopPropagation()}>
-        <div className="modal__header">
-          <h2 id="review-modal-title" className="modal__title">
-            {type === 'item' ? '⭐ Review Item' : '🚚 Review Delivery'}
-          </h2>
-          <button className="modal__close" onClick={onClose} aria-label="Close">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div className="modal__body">
-          {type === 'item' ? (
-            <div>
-              <div className="review-item__product">
-                <span className="review-item__emoji">{product.icon}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
                 <div>
-                  <strong>{product.name}</strong>
-                  <span>{product.unit}</span>
+                  <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#B91C1C', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>⚠️</span>
+                    <span>Report an Order Issue</span>
+                  </h2>
+                  <p style={{ fontSize: '13px', color: '#6B7280', marginTop: '2px' }}>
+                    Generate a high-priority customer support ticket.
+                  </p>
                 </div>
-              </div>
-
-              <div className="input-group">
-                <label className="input-label">Your Rating</label>
-                <div className="rating" role="radiogroup" aria-label="Select rating">
-                  {[1,2,3,4,5].map(star => (
-                    <button
-                      key={star}
-                      type="button"
-                      className={`rating__star ${data.rating >= star ? 'rating__star--filled' : ''}`}
-                      onClick={() => onDataChange({...data, rating: star})}
-                      aria-label={`${star} star${star > 1 ? 's' : ''}`}
-                    >★</button>
-                  ))}
-                </div>
-              </div>
-
-              {data.rating <= 3 && data.rating > 0 && (
-                <div className="input-group">
-                  <label className="input-label">Issues (select all that apply)</label>
-                  <div className="review-issues">
-                    {itemIssueOptions.map(issue => (
-                      <label key={issue} className="review-issue__label">
-                        <input
-                          type="checkbox"
-                          checked={data.issues.includes(issue)}
-                          onChange={(e) => onDataChange({
-                            ...data,
-                            issues: e.target.checked
-                              ? [...data.issues, issue]
-                              : data.issues.filter(i => i !== issue)
-                          })}
-                        />
-                        <span>{issue}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="input-group">
-                <label htmlFor="itemComment" className="input-label">Comment (optional)</label>
-                <textarea
-                  id="itemComment"
-                  className="input textarea"
-                  value={data.comment}
-                  onChange={(e) => onDataChange({...data, comment: e.target.value})}
-                  placeholder="Share your experience..."
-                  rows={3}
-                />
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="review-delivery__rider">
-                <div className="avatar avatar--lg">{order.riderName?.charAt(0) || 'R'}</div>
-                <div>
-                  <strong>{order.riderName}</strong>
-                  <span>{order.riderVehicle}</span>
-                </div>
-              </div>
-
-              <div className="grid-2">
-                <div className="input-group">
-                  <label className="input-label">Delivery Speed</label>
-                  <div className="rating" role="radiogroup" aria-label="Rate delivery speed">
-                    {[1,2,3,4,5].map(star => (
-                      <button
-                        key={`speed-${star}`}
-                        type="button"
-                        className={`rating__star ${data.speedRating >= star ? 'rating__star--filled' : ''}`}
-                        onClick={() => onDataChange({...data, speedRating: star})}
-                        aria-label={`${star} star${star > 1 ? 's' : ''}`}
-                      >★</button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="input-group">
-                  <label className="input-label">Rider Politeness</label>
-                  <div className="rating" role="radiogroup" aria-label="Rate rider politeness">
-                    {[1,2,3,4,5].map(star => (
-                      <button
-                        key={`rider-${star}`}
-                        type="button"
-                        className={`rating__star ${data.riderRating >= star ? 'rating__star--filled' : ''}`}
-                        onClick={() => onDataChange({...data, riderRating: star})}
-                        aria-label={`${star} star${star > 1 ? 's' : ''}`}
-                      >★</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label htmlFor="packageCondition" className="input-label">Package Condition</label>
-                <select
-                  id="packageCondition"
-                  className="input select"
-                  value={data.packageCondition}
-                  onChange={(e) => onDataChange({...data, packageCondition: e.target.value})}
+                <button
+                  type="button"
+                  onClick={() => setReportingOrder(null)}
+                  style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer', color: '#9CA3AF' }}
                 >
-                  <option value="">Select condition</option>
-                  {packageConditionOptions.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
+                  ✕
+                </button>
               </div>
 
-              <div className="input-group">
-                <label htmlFor="remarks" className="input-label">Remarks (optional)</label>
-                <textarea
-                  id="remarks"
-                  className="input textarea"
-                  value={data.remarks}
-                  onChange={(e) => onDataChange({...data, remarks: e.target.value})}
-                  placeholder="Any additional comments..."
-                  rows={3}
-                />
-              </div>
+              <form onSubmit={handleReportSubmit}>
+                <div className="input-group">
+                  <label className="input-label">Associated Order Ref</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={`Order ${reportingOrder.id}`}
+                    className="input"
+                    style={{ background: '#F9FAFB', fontWeight: 600, color: '#4B5563' }}
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label">Issue Category *</label>
+                  <select
+                    className="input select"
+                    value={issueCategory}
+                    onChange={(e) => setIssueCategory(e.target.value)}
+                  >
+                    <option value="Missing Items from Package">Missing Items from Package</option>
+                    <option value="Damaged / Spoiled Items">Damaged / Spoiled Items</option>
+                    <option value="Late Delivery">Late Delivery</option>
+                    <option value="Wrong Items Delivered">Wrong Items Delivered</option>
+                    <option value="Payment / Billing Issue">Payment / Billing Issue</option>
+                    <option value="Other Inquiries">Other Inquiries</option>
+                  </select>
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label">Urgency Priority</label>
+                  <select
+                    className="input select"
+                    value={urgencyPriority}
+                    onChange={(e) => setUrgencyPriority(e.target.value)}
+                  >
+                    <option value="Low Priority">Low Priority</option>
+                    <option value="Medium Priority">Medium Priority</option>
+                    <option value="High Priority / Critical">High Priority / Critical</option>
+                  </select>
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label">Describe the Problem *</label>
+                  <textarea
+                    rows={4}
+                    className="input textarea"
+                    placeholder="Please provide specific details so our support team can resolve this quickly..."
+                    value={issueDescription}
+                    onChange={(e) => setIssueDescription(e.target.value)}
+                    style={{ minHeight: '90px' }}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn--danger btn--full"
+                  style={{ height: '44px', fontWeight: 700, fontSize: '14.5px', marginTop: '12px', background: '#DC2626' }}
+                >
+                  🚨 Submit Support Ticket
+                </button>
+              </form>
             </div>
-          )}
-        </div>
-        <div className="modal__footer">
-          <button className="btn btn--secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn--primary" onClick={onSubmit}>Submit Review</button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
-
-const CustomerLayout = ({ children }) => (
-  <div className="customer-layout">
-    <main className="customer-layout__content" role="main">
-      <div className="container">{children}</div>
-    </main>
-  </div>
-);
 
 export default Orders;

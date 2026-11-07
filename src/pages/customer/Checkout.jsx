@@ -1,62 +1,40 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 
 const Checkout = () => {
-  const { cart, calculateTotals, createOrder, getCurrentUserId } = useStore();
-  const { user, protectPage } = useAuth();
+  const { cart, createOrder, clearCart } = useStore();
+  const { user } = useAuth();
   const { showToast } = useUI();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState('address');
   const [paymentMethod, setPaymentMethod] = useState('cod');
-  const [upiVpa, setUpiVpa] = useState('');
-  const [upiLoading, setUpiLoading] = useState(false);
+  const [upiAuthorized, setUpiAuthorized] = useState(false);
+  const [upiVpa, setUpiVpa] = useState('demo@grocerygo');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [placedOrder, setPlacedOrder] = useState(null);
+
   const [formData, setFormData] = useState({
-    fullName: '',
-    phone: '',
-    address: '',
-    city: '',
-    pincode: '',
+    fullName: user?.name || 'sohith',
+    phone: user?.phone || '9848483113',
+    address: user?.address || '41-1/20-17 Balaji nagar',
+    city: 'Vijayawada',
+    pincode: '520013',
   });
+
   const [errors, setErrors] = useState({});
-  const [order, setOrder] = useState(null);
-  const txnCounter = useRef(0);
 
   useEffect(() => {
-    protectPage('user');
-    if (cart.length === 0) {
+    if (cart.length === 0 && !placedOrder) {
       navigate('/cart');
-      return;
     }
-    if (user) {
-      setFormData({
-        fullName: user.name,
-        phone: user.phone,
-        address: user.address.split(',')[0] || '',
-        city: 'Vijayawada',
-        pincode: '520001',
-      });
-    }
-  }, [protectPage, cart, user, navigate]);
+  }, [cart, placedOrder, navigate]);
 
-  const totals = calculateTotals(cart);
-
-  const validateAddress = () => {
-    const newErrors = {};
-    if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
-    if (!formData.phone) newErrors.phone = 'Phone number is required';
-    else if (!/^\d{10}$/.test(formData.phone.replace(/\D/g, ''))) newErrors.phone = 'Enter a valid 10-digit phone number';
-    if (!formData.address.trim()) newErrors.address = 'Address is required';
-    if (!formData.city.trim()) newErrors.city = 'City is required';
-    if (!formData.pincode) newErrors.pincode = 'Pincode is required';
-    else if (!/^\d{6}$/.test(formData.pincode)) newErrors.pincode = 'Enter a valid 6-digit pincode';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const deliveryFee = 0; // FREE Delivery unlocked
+  const total = subtotal + deliveryFee;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -64,416 +42,460 @@ const Checkout = () => {
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
-  const handleAddressSubmit = (e) => {
-    e.preventDefault();
-    if (validateAddress()) {
-      setStep('payment');
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
+    if (!formData.phone.trim()) newErrors.phone = 'Phone Number is required';
+    if (!formData.address.trim()) newErrors.address = 'Delivery address is required';
+    if (!formData.city.trim()) newErrors.city = 'City is required';
+    if (!formData.pincode.trim()) newErrors.pincode = 'Pincode is required';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handlePlaceOrder = () => {
+    if (!validate()) {
+      showToast('Please fill all required delivery details', 'error');
+      return;
     }
-  };
 
-  const handlePaymentSubmit = async (e) => {
-    e.preventDefault();
-    if (paymentMethod === 'upi') {
-      if (!upiVpa || !upiVpa.includes('@')) {
-        showToast('Enter a valid UPI ID (e.g., demo@grocerygo)', 'error');
-        return;
-      }
-      await simulateUpiPayment();
-    } else {
-      placeOrder();
+    if (paymentMethod === 'upi' && !upiAuthorized) {
+      showToast('Please authorize the UPI payment simulation first', 'warning');
+      return;
     }
-  };
 
-  const simulateUpiPayment = async () => {
-    setUpiLoading(true);
-    showToast('Authorizing UPI payment...', 'info');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setUpiLoading(false);
-    const success = true;
-    if (success) {
-      showToast('Payment successful!', 'success');
-      txnCounter.current += 1;
-      placeOrder('UPI', 'Paid', `TXN${txnCounter.current}`);
-    } else {
-      showToast('Payment failed. Please try again.', 'error');
+    setIsSubmitting(true);
+
+    const orderId = '#GG' + new Date().getFullYear() + String(Date.now()).slice(-8);
+    const orderData = {
+      id: orderId,
+      customerName: formData.fullName,
+      phone: formData.phone,
+      address: formData.address,
+      city: formData.city,
+      pincode: formData.pincode,
+      items: cart.map(i => ({
+        id: i.id,
+        name: i.name,
+        icon: i.icon || '🍏',
+        price: i.price,
+        quantity: i.quantity,
+        unit: i.unit || '1 kg',
+      })),
+      total: total,
+      paymentMethod: paymentMethod === 'cod' ? 'Cash on Delivery' : 'UPI',
+      paymentStatus: paymentMethod === 'cod' ? 'Pending' : 'Paid',
+      status: 'Order Placed',
+      orderDate: new Date().toISOString(),
+      riderName: null,
+      riderPhone: null,
+    };
+
+    if (createOrder) {
+      createOrder(orderData);
     }
+
+    clearCart();
+    window.dispatchEvent(new CustomEvent('cart-updated'));
+    setIsSubmitting(false);
+    setPlacedOrder(orderData);
+    showToast('Order placed successfully!', 'success');
   };
 
-  const placeOrder = async (method = 'Cash on Delivery', _status = 'Pending', _txnId = null) => {
-    const userId = getCurrentUserId();
-    try {
-      const newOrder = createOrder({
-        userId,
-        customerName: formData.fullName,
-        phone: formData.phone,
-        address: formData.address,
-        city: formData.city,
-        pincode: formData.pincode,
-        paymentMethod: method,
-        couponCode: null,
-        items: cart,
-      });
-      setOrder(newOrder);
-      setStep('success');
-      showToast('Order placed successfully!', 'success');
-    } catch (error) {
-      showToast(error.message, 'error');
-    }
-  };
-
-  const handleSimulateFailure = () => {
-    setUpiLoading(false);
-    showToast('Payment declined (simulated)', 'error');
-  };
-
-  // Render steps
-  if (step === 'address') {
+  // If order was successfully placed, render Order Success View matching Screenshot (335).png
+  if (placedOrder) {
     return (
-      <CustomerLayout>
-        <div className="checkout-page">
-          <CheckoutStepper currentStep={1} />
+      <div style={{ background: '#F8FAF9', minHeight: '80vh', padding: '48px 0 64px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div
+          style={{
+            background: '#FFFFFF',
+            border: '1px solid #E5E7EB',
+            borderRadius: '24px',
+            maxWidth: '620px',
+            width: '100%',
+            padding: '40px',
+            textAlign: 'center',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+          }}
+        >
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>🎉</div>
+          <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#16A34A', marginBottom: '8px' }}>
+            Order Placed Successfully!
+          </h1>
+          <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '28px' }}>
+            Thank you for shopping with GroceryGo! Your order has been placed and is being prepared.
+          </p>
 
-          <header className="page-header" role="heading" aria-level="1">
-            <div className="page-header__left">
-              <nav className="breadcrumb" aria-label="Breadcrumb">
-                <ol className="breadcrumb__list">
-                  <li className="breadcrumb__item"><a href="/cart" className="breadcrumb__link">Cart</a></li>
-                  <li className="breadcrumb__item"><span className="breadcrumb__current" aria-current="page">Checkout</span></li>
-                </ol>
-              </nav>
-              <div>
-                <h1 className="page-header__title">Checkout</h1>
-                <p className="page-header__subtitle">Enter delivery details</p>
-              </div>
+          <div
+            style={{
+              background: '#F9FAFB',
+              border: '1px solid #E5E7EB',
+              borderRadius: '16px',
+              padding: '20px 24px',
+              textAlign: 'left',
+              fontSize: '13.5px',
+              color: '#374151',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+              marginBottom: '32px',
+            }}
+          >
+            <div>
+              <strong>Order ID:</strong> <span style={{ color: '#16A34A', fontWeight: 700 }}>{placedOrder.id}</span>
             </div>
-          </header>
+            <div>
+              <strong>Recipient:</strong> {placedOrder.customerName} ({placedOrder.phone})
+            </div>
+            <div>
+              <strong>Delivery Address:</strong> {placedOrder.address}, {placedOrder.city} - {placedOrder.pincode}
+            </div>
+            <div>
+              <strong>Payment Mode:</strong> {placedOrder.paymentMethod} ({placedOrder.paymentStatus})
+            </div>
+            <div>
+              <strong>Items Ordered:</strong> {placedOrder.items.length} product(s)
+            </div>
+            <div>
+              <strong>Total Paid:</strong> <span style={{ color: '#16A34A', fontWeight: 800 }}>₹{placedOrder.total}</span>
+            </div>
+            <div style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '4px' }}>
+              Order Placed on {new Date(placedOrder.orderDate).toLocaleString()}
+            </div>
+          </div>
 
-          <form onSubmit={handleAddressSubmit} className="checkout-form">
-            <div className="card checkout-form__section">
-              <h3 className="checkout-form__section-title">Delivery Address</h3>
+          <div style={{ display: 'flex', gap: '14px', justifyContent: 'center' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/orders')}
+              className="btn btn--primary"
+              style={{ height: '44px', padding: '0 22px' }}
+            >
+              📦 Track Order Now
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/products')}
+              className="btn btn--secondary"
+              style={{ height: '44px', padding: '0 22px', color: '#16A34A', borderColor: '#16A34A' }}
+            >
+              Continue Shopping
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-              <div className="grid-2">
-                <div className="input-group">
-                  <label htmlFor="fullName" className="input-label">Full Name</label>
+  return (
+    <div style={{ background: '#F8FAF9', minHeight: '80vh', padding: '36px 0 64px' }}>
+      <div className="container">
+        {/* Title */}
+        <div style={{ marginBottom: '28px' }}>
+          <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#1F2937', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>📍</span>
+            <span>Finalize Your Order</span>
+          </h1>
+          <p style={{ fontSize: '14px', color: '#6B7280', marginTop: '4px' }}>
+            Enter your delivery address and choose your payment method.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '28px', alignItems: 'flex-start' }}>
+          {/* Left Column: Cards 1 & 2 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Card 1: Delivery Address & Details */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', marginBottom: '20px' }}>
+                Delivery Address & Details
+              </h2>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Full Name *</label>
                   <input
-                    id="fullName"
-                    name="fullName"
                     type="text"
-                    className={`input ${errors.fullName ? 'input--error' : ''}`}
+                    name="fullName"
                     value={formData.fullName}
                     onChange={handleChange}
-                    placeholder="Enter full name"
-                    aria-invalid={!!errors.fullName}
+                    className={`input ${errors.fullName ? 'input--error' : ''}`}
+                    placeholder="e.g. Sohith"
                   />
-                  {errors.fullName && <span className="input-error" role="alert">{errors.fullName}</span>}
+                  {errors.fullName && <span className="input-error">{errors.fullName}</span>}
                 </div>
 
-                <div className="input-group">
-                  <label htmlFor="phone" className="input-label">Phone Number</label>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Phone Number *</label>
                   <input
-                    id="phone"
+                    type="text"
                     name="phone"
-                    type="tel"
-                    className={`input ${errors.phone ? 'input--error' : ''}`}
                     value={formData.phone}
                     onChange={handleChange}
-                    placeholder="10-digit mobile number"
-                    aria-invalid={!!errors.phone}
+                    className={`input ${errors.phone ? 'input--error' : ''}`}
+                    placeholder="e.g. 9848483113"
                   />
-                  {errors.phone && <span className="input-error" role="alert">{errors.phone}</span>}
+                  {errors.phone && <span className="input-error">{errors.phone}</span>}
                 </div>
               </div>
 
-              <div className="input-group">
-                <label htmlFor="address" className="input-label">Full Address</label>
+              <div className="input-group" style={{ marginBottom: '16px' }}>
+                <label className="input-label">Delivery Address (House/Flat, Street, Landmark) *</label>
                 <textarea
-                  id="address"
                   name="address"
-                  className={`input textarea ${errors.address ? 'input--error' : ''}`}
                   value={formData.address}
                   onChange={handleChange}
-                  placeholder="House/Flat No., Building, Street, Area"
-                  aria-invalid={!!errors.address}
+                  className={`input textarea ${errors.address ? 'input--error' : ''}`}
+                  style={{ minHeight: '70px' }}
+                  placeholder="e.g. 41-1/20-17 Balaji nagar"
                 />
-                {errors.address && <span className="input-error" role="alert">{errors.address}</span>}
+                {errors.address && <span className="input-error">{errors.address}</span>}
               </div>
 
-              <div className="grid-2">
-                <div className="input-group">
-                  <label htmlFor="city" className="input-label">City</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">City *</label>
                   <input
-                    id="city"
-                    name="city"
                     type="text"
-                    className={`input ${errors.city ? 'input--error' : ''}`}
+                    name="city"
                     value={formData.city}
                     onChange={handleChange}
-                    placeholder="City"
-                    aria-invalid={!!errors.city}
+                    className={`input ${errors.city ? 'input--error' : ''}`}
+                    placeholder="e.g. Vijayawada"
                   />
-                  {errors.city && <span className="input-error" role="alert">{errors.city}</span>}
+                  {errors.city && <span className="input-error">{errors.city}</span>}
                 </div>
 
-                <div className="input-group">
-                  <label htmlFor="pincode" className="input-label">Pincode</label>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label className="input-label">Pincode *</label>
                   <input
-                    id="pincode"
-                    name="pincode"
                     type="text"
-                    className={`input ${errors.pincode ? 'input--error' : ''}`}
+                    name="pincode"
                     value={formData.pincode}
                     onChange={handleChange}
-                    placeholder="6-digit pincode"
-                    aria-invalid={!!errors.pincode}
+                    className={`input ${errors.pincode ? 'input--error' : ''}`}
+                    placeholder="e.g. 520013"
                   />
-                  {errors.pincode && <span className="input-error" role="alert">{errors.pincode}</span>}
+                  {errors.pincode && <span className="input-error">{errors.pincode}</span>}
                 </div>
               </div>
             </div>
 
-            <div className="checkout-form__actions">
-              <button type="button" className="btn btn--secondary" onClick={() => navigate('/cart')}>
-                Back to Cart
-              </button>
-              <button type="submit" className="btn btn--primary btn--lg">Continue to Payment →</button>
-            </div>
-          </form>
-        </div>
-      </CustomerLayout>
-    );
-  }
+            {/* Card 2: Payment Method */}
+            <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', marginBottom: '16px' }}>
+                Payment Method (Simulated Academic Demo)
+              </h2>
 
-  if (step === 'payment') {
-    return (
-      <CustomerLayout>
-        <div className="checkout-page">
-          <CheckoutStepper currentStep={2} />
-
-          <header className="page-header" role="heading" aria-level="1">
-            <div className="page-header__left">
-              <nav className="breadcrumb" aria-label="Breadcrumb">
-                <ol className="breadcrumb__list">
-                  <li className="breadcrumb__item"><a href="/cart" className="breadcrumb__link">Cart</a></li>
-                  <li className="breadcrumb__item"><span className="breadcrumb__current" aria-current="page">Checkout</span></li>
-                </ol>
-              </nav>
-              <div>
-                <h1 className="page-header__title">Payment</h1>
-                <p className="page-header__subtitle">Choose your payment method</p>
-              </div>
-            </div>
-          </header>
-
-          <form onSubmit={handlePaymentSubmit} className="checkout-form">
-            <div className="card checkout-form__section">
-              <h3 className="checkout-form__section-title">Payment Method</h3>
-
-              <div className="payment-options">
-                <label className={`payment-option ${paymentMethod === 'cod' ? 'payment-option--selected' : ''}`}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Cash on Delivery option */}
+                <div
+                  onClick={() => setPaymentMethod('cod')}
+                  style={{
+                    border: paymentMethod === 'cod' ? '2px solid #16A34A' : '1px solid #E5E7EB',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    cursor: 'pointer',
+                    background: paymentMethod === 'cod' ? '#F0FDF4' : '#FFFFFF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 120ms ease',
+                  }}
+                >
                   <input
                     type="radio"
                     name="paymentMethod"
-                    value="cod"
                     checked={paymentMethod === 'cod'}
                     onChange={() => setPaymentMethod('cod')}
+                    style={{ accentColor: '#16A34A', width: '18px', height: '18px', cursor: 'pointer' }}
                   />
-                  <div className="payment-option__content">
-                    <div className="payment-option__icon">💵</div>
-                    <div className="payment-option__info">
-                      <strong>Cash on Delivery</strong>
-                      <span>Pay when your order arrives</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '15px', color: '#1F2937', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>💵</span>
+                      <span>Cash on Delivery (COD)</span>
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: '#6B7280', marginTop: '2px' }}>
+                      Pay with cash or UPI to the delivery rider at your doorstep
                     </div>
                   </div>
-                  <svg className="payment-option__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </label>
-
-                <label className={`payment-option ${paymentMethod === 'upi' ? 'payment-option--selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="upi"
-                    checked={paymentMethod === 'upi'}
-                    onChange={() => setPaymentMethod('upi')}
-                  />
-                  <div className="payment-option__content">
-                    <div className="payment-option__icon">📱</div>
-                    <div className="payment-option__info">
-                      <strong>UPI — Demo Payment</strong>
-                      <span>Pay instantly with UPI (simulated)</span>
-                    </div>
-                  </div>
-                  <svg className="payment-option__check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </label>
-              </div>
-
-              {paymentMethod === 'upi' && (
-                <div className="upi-form" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border)' }}>
-                  <h4 className="checkout-form__section-title" style={{ fontSize: '1rem' }}>Enter UPI ID</h4>
-                  <div className="input-group">
-                    <label htmlFor="upiVpa" className="input-label">UPI ID (VPA)</label>
-                    <input
-                      id="upiVpa"
-                      type="text"
-                      className="input"
-                      placeholder="demo@grocerygo or rahul@okhdfcbank"
-                      value={upiVpa}
-                      onChange={(e) => setUpiVpa(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="upi-qr" style={{ textAlign: 'center', margin: '24px 0' }}>
-                    <div className="upi-qr__placeholder" style={{
-                      width: '200px', height: '200px', margin: '0 auto',
-                      border: '2px dashed var(--border)', borderRadius: 'var(--radius)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                      background: 'var(--bg)'
-                    }}>
-                      <span style={{ fontSize: '4rem' }}>📱</span>
-                      <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>Demo QR Code</p>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-light)' }}>Scan with any UPI app</p>
-                    </div>
-                  </div>
-
-                  <div className="upi-actions" style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                    <button
-                      type="button"
-                      className="btn btn--primary btn--lg"
-                      onClick={simulateUpiPayment}
-                      disabled={upiLoading}
-                    >
-                      {upiLoading ? (
-                        <>
-                          <span className="btn__spinner" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="31.4 31.4" className="btn__spinner-circle" />
-                            </svg>
-                          </span>
-                          Authorizing...
-                        </>
-                      ) : (
-                        '✅ Authorize UPI (Simulate Success)'
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn--danger btn--lg"
-                      onClick={handleSimulateFailure}
-                      disabled={upiLoading}
-                    >
-                      ❌ Simulate Failure
-                    </button>
-                  </div>
-
-                  <p className="input-helper" style={{ textAlign: 'center', marginTop: '12px' }}>
-                    This is a demo payment simulator. No real money is charged.
-                  </p>
                 </div>
-              )}
-            </div>
 
-            <div className="checkout-form__actions">
-              <button type="button" className="btn btn--secondary" onClick={() => setStep('address')}>
-                ← Back
-              </button>
-              <button type="submit" className="btn btn--primary btn--lg" disabled={upiLoading}>
-                {upiLoading ? 'Processing...' : paymentMethod === 'upi' ? 'Pay with UPI' : 'Place Order'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </CustomerLayout>
-    );
-  }
+                {/* UPI Simulator option */}
+                <div
+                  onClick={() => setPaymentMethod('upi')}
+                  style={{
+                    border: paymentMethod === 'upi' ? '2px solid #16A34A' : '1px solid #E5E7EB',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    cursor: 'pointer',
+                    background: paymentMethod === 'upi' ? '#F0FDF4' : '#FFFFFF',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    transition: 'all 120ms ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={paymentMethod === 'upi'}
+                      onChange={() => setPaymentMethod('upi')}
+                      style={{ accentColor: '#16A34A', width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '15px', color: '#1F2937', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>📱</span>
+                        <span>UPI — Demo Payment Simulator</span>
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#6B7280', marginTop: '2px' }}>
+                        Simulate instant UPI authorization (GPay, PhonePe, Paytm, BHIM)
+                      </div>
+                    </div>
+                  </div>
 
-  // Success step
-  return (
-    <CustomerLayout>
-      <div className="checkout-page">
-        <CheckoutStepper currentStep={3} completed />
+                  {paymentMethod === 'upi' && (
+                    <div
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px dashed #16A34A',
+                        borderRadius: '10px',
+                        padding: '16px',
+                        marginTop: '8px',
+                      }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#15803D' }}>
+                          📱 Fast UPI Checkout Simulation
+                        </span>
+                        <span className="badge badge--success" style={{ fontSize: '10px' }}>
+                          Zero Real Money
+                        </span>
+                      </div>
 
-        <header className="page-header" role="heading" aria-level="1">
-          <div className="page-header__left">
-            <nav className="breadcrumb" aria-label="Breadcrumb">
-              <ol className="breadcrumb__list">
-                <li className="breadcrumb__item"><a href="/cart" className="breadcrumb__link">Cart</a></li>
-                <li className="breadcrumb__item"><span className="breadcrumb__current" aria-current="page">Checkout</span></li>
-              </ol>
-            </nav>
-            <div>
-              <h1 className="page-header__title">Order Confirmed!</h1>
-              <p className="page-header__subtitle">Your order {order?.id} has been placed successfully</p>
-            </div>
-          </div>
-        </header>
+                      <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>
+                            Virtual Payment Address (UPI ID)
+                          </label>
+                          <input
+                            type="text"
+                            value={upiVpa}
+                            onChange={(e) => setUpiVpa(e.target.value)}
+                            className="input"
+                            style={{ height: '38px', fontSize: '13px' }}
+                          />
+                          <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
+                            Supported: @oksbi, @okhdfcbank, @icici, @paytm, @ybl
+                          </div>
+                        </div>
 
-        <div className="success-card card">
-          <div className="success-card__icon" aria-hidden="true">✅</div>
-          <h2 className="success-card__title">Thank you for your order!</h2>
-          <p className="success-card__message">Your groceries will be delivered soon</p>
+                        {/* QR Box */}
+                        <div
+                          style={{
+                            width: '90px',
+                            height: '90px',
+                            background: '#F9FAFB',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '11px',
+                            color: '#6B7280',
+                            textAlign: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <span style={{ fontSize: '24px' }}>🏁</span>
+                          <span style={{ fontWeight: 700, color: '#16A34A', marginTop: '2px' }}>₹{total}</span>
+                        </div>
+                      </div>
 
-          <div className="success-card__details">
-            <div className="success-card__detail">
-              <strong>Order ID:</strong> {order?.id}
-            </div>
-            <div className="success-card__detail">
-              <strong>Payment:</strong> {order?.paymentMethod} {order?.paymentStatus === 'Paid' ? '(Paid)' : '(Pay on Delivery)'}
-            </div>
-            {order?.transactionId && (
-              <div className="success-card__detail">
-                <strong>Transaction:</strong> {order?.transactionId}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUpiAuthorized(true);
+                            showToast('UPI payment authorized (Demo)', 'success');
+                          }}
+                          className="btn btn--primary"
+                          style={{ flex: 1, height: '36px', fontSize: '13px' }}
+                        >
+                          {upiAuthorized ? '✓ Authorized' : '✔ Authorize UPI (Simulate Success)'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUpiAuthorized(false);
+                            showToast('UPI simulation rejected', 'error');
+                          }}
+                          className="btn btn--danger"
+                          style={{ height: '36px', fontSize: '13px' }}
+                        >
+                          ✕ Simulate Failure
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-            <div className="success-card__detail">
-              <strong>Total:</strong> ₹{order?.total}
             </div>
-            <div className="success-card__detail">
-              <strong>Delivery to:</strong> {order?.address}, {order?.city} - {order?.pincode}
-            </div>
+
+            {/* Place Order CTA Button */}
+            <button
+              type="button"
+              onClick={handlePlaceOrder}
+              disabled={isSubmitting}
+              className="btn btn--primary btn--full"
+              style={{ height: '50px', fontSize: '16px', fontWeight: 800 }}
+            >
+              {paymentMethod === 'cod'
+                ? '🛍️ Place Order (Cash on Delivery)'
+                : '⚡ Pay via UPI & Place Order'}
+            </button>
           </div>
 
-          <div className="success-card__actions">
-            <button className="btn btn--primary btn--lg" onClick={() => navigate('/orders')}>
-              Track Order Now
-            </button>
-            <Link to="/dashboard" className="btn btn--secondary btn--lg">
-              Continue Shopping
-            </Link>
+          {/* Right Column: Order Summary Card */}
+          <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '16px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937', marginBottom: '18px' }}>
+              Order Summary
+            </h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px', borderBottom: '1px solid #F3F4F6', marginBottom: '16px' }}>
+              {cart.map(item => (
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13.5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{item.icon || '🍏'}</span>
+                    <span style={{ color: '#1F2937', fontWeight: 600 }}>{item.name} × {item.quantity}</span>
+                  </div>
+                  <span style={{ fontWeight: 700, color: '#1F2937' }}>₹{item.price * item.quantity}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px', color: '#4B5563', paddingBottom: '16px', borderBottom: '1px solid #F3F4F6' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Subtotal</span>
+                <span style={{ fontWeight: 600, color: '#1F2937' }}>₹{subtotal}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Delivery Fee</span>
+                <span style={{ fontWeight: 700, color: '#16A34A' }}>FREE</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px' }}>
+              <span style={{ fontSize: '18px', fontWeight: 800, color: '#1F2937' }}>Total Amount</span>
+              <span style={{ fontSize: '24px', fontWeight: 900, color: '#16A34A' }}>₹{total}</span>
+            </div>
           </div>
         </div>
-      </div>
-    </CustomerLayout>
-  );
-  }
-
-const CheckoutStepper = ({ currentStep, completed }) => (
-  <div className="checkout-stepper" role="navigation" aria-label="Checkout progress">
-    <div className="stepper">
-      <div className={`stepper__item ${currentStep >= 1 ? (currentStep > 1 || completed ? 'stepper__item--completed' : 'stepper__item--active') : ''}`}>
-        <div className="stepper__circle">{currentStep > 1 || completed ? '✓' : '1'}</div>
-        <span className="stepper__label">Address</span>
-      </div>
-      <div className={`stepper__item ${currentStep >= 2 ? (currentStep > 2 || completed ? 'stepper__item--completed' : 'stepper__item--active') : ''}`}>
-        <div className="stepper__circle">{currentStep > 2 || completed ? '✓' : '2'}</div>
-        <span className="stepper__label">Payment</span>
-      </div>
-      <div className={`stepper__item ${completed ? 'stepper__item--completed' : ''}`}>
-        <div className="stepper__circle">{completed ? '✓' : '3'}</div>
-        <span className="stepper__label">Confirm</span>
       </div>
     </div>
-  </div>
-);
-
-const CustomerLayout = ({ children }) => (
-  <div className="customer-layout">
-    <main className="customer-layout__content" role="main">
-      <div className="container">{children}</div>
-    </main>
-  </div>
-);
+  );
+};
 
 export default Checkout;
